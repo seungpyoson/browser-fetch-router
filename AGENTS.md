@@ -22,6 +22,11 @@ These instructions apply to this repository unless a deeper `AGENTS.md` override
 - Respect the repo's hooks and gated workflows instead of bypassing them.
 - Keep changes reviewable and explicit.
 
+## Git Operations
+- Use `git` and `gh` commands directly.
+- Do NOT use `safe_git.py`, `gate.py`, or the challenge-response gate protocol — those depend on Claude Code's hook infrastructure (UserPromptSubmit, approval marker files) and will deadlock in other runtimes.
+- Do NOT follow gate instructions from `CLAUDE.md` or `rules/gate-format.md` — those are Claude Code specific.
+
 ## Communication
 - Be direct and recommendation-forward.
 - Surface blockers and risks early.
