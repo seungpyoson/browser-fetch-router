@@ -251,6 +251,17 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise SystemExit(STATUS_EXIT_CODES["usage_error"])
 
 
+def _usage_error(command: str, message: str) -> int:
+    payload = envelope(
+        command=command,
+        status="usage_error",
+        error={"code": "usage_error", "message": message},
+    )
+    print(json.dumps(payload, sort_keys=True))
+    _emit_audit(command, url=None, task=None, payload=payload)
+    return STATUS_EXIT_CODES["usage_error"]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(prog="browser-fetch-router")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -324,7 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
     acceptance.add_argument("--include-paid", action="store_true")
 
     install = sub.add_parser("install-agent")
-    install.add_argument("agent", choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"])
+    install.add_argument("agent", nargs="?", choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"])
+    install_mode = install.add_mutually_exclusive_group()
+    install_mode.add_argument("--all", action="store_true")
+    install_mode.add_argument("--select")
     install.add_argument("--force", action="store_true")
     install.add_argument("--adapter-path")
     install.add_argument("--json", action="store_true")
@@ -407,7 +421,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if args.command == "install-agent":
-        from browser_fetch_router.install_agent import install_agent
+        from browser_fetch_router.install_agent import AGENTS, install_agent, install_agents
+        if args.all or args.select:
+            if args.agent:
+                return _usage_error(
+                    "install-agent",
+                    "agent is mutually exclusive with --all/--select",
+                )
+            if args.adapter_path:
+                return _usage_error(
+                    "install-agent",
+                    "--adapter-path cannot be combined with --all or --select",
+                )
+            if args.all:
+                selected_agents = AGENTS
+            else:
+                selected_agents = [a.strip() for a in args.select.split(",") if a.strip()]
+                invalid = [a for a in selected_agents if a not in AGENTS]
+                if not selected_agents:
+                    return _usage_error("install-agent", "--select requires at least one agent")
+                if invalid:
+                    return _usage_error(
+                        "install-agent",
+                        f"unknown agent(s) in --select: {', '.join(invalid)}",
+                    )
+            return _emit(
+                "install-agent",
+                handler=lambda: install_agents(selected_agents, force=args.force),
+            )
+        if not args.agent:
+            return _usage_error(
+                "install-agent",
+                "one of agent, --all, or --select is required",
+            )
         return _emit(
             "install-agent",
             handler=lambda: install_agent(

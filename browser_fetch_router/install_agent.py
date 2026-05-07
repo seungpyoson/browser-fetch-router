@@ -32,6 +32,8 @@ SAFE_ENV_KEYS = {
     "BFR_CDP_URL",
 }
 
+AGENTS = ["claude", "codex", "gemini", "kimi", "opencode", "pi"]
+
 
 def _safe_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
@@ -63,6 +65,40 @@ def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
         "pi": Path(os.environ.get("PI_HOME", str(h / ".config" / "pi"))) / "skills" / "browser-fetch-router" / "SKILL.md",
     }
     return mapping[agent]
+
+
+def install_agents(
+    agents: list[str],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    results = []
+    all_ok = True
+    for agent in agents:
+        result = install_agent(agent, force=force)
+        entry = {
+            "agent": agent,
+            "status": result.get("status"),
+            "artifacts": result.get("artifacts") or [],
+        }
+        if result.get("error"):
+            entry["error"] = result["error"]
+        if result.get("evidence"):
+            entry["evidence"] = result["evidence"]
+        if result.get("status") != "ok":
+            all_ok = False
+        results.append(entry)
+    return envelope(
+        command="install-agent",
+        status="ok" if all_ok else "tool_setup_failed",
+        artifacts=[
+            artifact
+            for entry in results
+            for artifact in entry.get("artifacts", [])
+        ],
+        evidence={"results": results},
+        results=results,
+    )
 
 
 def adapter_text(agent: str) -> str:

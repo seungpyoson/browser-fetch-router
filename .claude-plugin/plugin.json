@@ -1,0 +1,20 @@
+{
+  "name": "browser-fetch-router",
+  "description": "Shared browser and web-fetch router CLI for Claude Code with centralized approvals, routing, cache, cost controls, audit, and cleanup.",
+  "version": "0.1.0",
+  "author": {
+    "name": "seungpyoson",
+    "url": "https://github.com/seungpyoson"
+  },
+  "homepage": "https://github.com/seungpyoson/browser-fetch-router",
+  "repository": "https://github.com/seungpyoson/browser-fetch-router",
+  "license": "MIT",
+  "keywords": [
+    "browser",
+    "web-fetch",
+    "agents",
+    "approvals",
+    "cost-controls"
+  ]
+}
+

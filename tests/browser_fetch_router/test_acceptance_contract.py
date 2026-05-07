@@ -2,10 +2,19 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def subprocess_env(base=None):
+    env = dict(base or os.environ)
+    env["PYTHONPATH"] = str(_REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    return env
 
 
 def run_cli(*args, **kwargs):
-    env = kwargs.pop("env", None) or {**os.environ}
+    env = subprocess_env(kwargs.pop("env", None))
     return subprocess.run(
         [sys.executable, "-m", "browser_fetch_router", *args],
         text=True,
@@ -66,6 +75,7 @@ def test_acceptance_help_works_from_tmp(tmp_path):
         stderr=subprocess.PIPE,
         check=False,
         cwd=tmp_path,
+        env=subprocess_env(),
     )
     assert result.returncode == 0
     assert "browser-fetch-router" in result.stdout

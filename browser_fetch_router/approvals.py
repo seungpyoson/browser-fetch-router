@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from browser_fetch_router import paths
 from browser_fetch_router.default_deny import is_default_denied
 from browser_fetch_router.paths import (
     SentinelLock,
     atomic_write_bytes,
-    config_dir,
     ensure_private_dir,
     read_json_dict,
 )
@@ -18,6 +18,10 @@ from browser_fetch_router.paths import (
 VALID_SCOPE_KINDS = {"exact", "hostname", "wildcard"}
 
 SESSION_TTL_SECONDS = 8 * 60 * 60  # 8 hours of inactivity
+
+
+def config_dir() -> Path:
+    return paths.config_dir()
 
 
 class InvalidScope(ValueError):

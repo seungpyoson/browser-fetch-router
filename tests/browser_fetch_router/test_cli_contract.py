@@ -1,13 +1,24 @@
 import json
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 from browser_fetch_router.cli import normalize_argv
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def subprocess_env():
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(_REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    return env
 
 
 def run_cli(*args):
     return subprocess.run(
         [sys.executable, "-m", "browser_fetch_router", *args],
+        env=subprocess_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -19,6 +30,7 @@ def test_help_works_from_any_cwd(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "browser_fetch_router", "--help"],
         cwd=tmp_path,
+        env=subprocess_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

@@ -1,0 +1,42 @@
+{
+  "name": "browser-fetch-router",
+  "version": "0.1.0",
+  "description": "Shared browser and web-fetch router CLI for coding agents with centralized routing, approvals, cache, cost controls, audit, and cleanup.",
+  "author": {
+    "name": "seungpyoson",
+    "url": "https://github.com/seungpyoson"
+  },
+  "homepage": "https://github.com/seungpyoson/browser-fetch-router",
+  "repository": "https://github.com/seungpyoson/browser-fetch-router",
+  "license": "MIT",
+  "keywords": [
+    "browser",
+    "web-fetch",
+    "agents",
+    "approvals",
+    "cost-controls"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Browser Fetch Router",
+    "shortDescription": "Shared web and browser access CLI for coding agents",
+    "longDescription": "Use Browser Fetch Router to route public web reads, user-tab reads, and interactive browser tasks through one policy-aware CLI with approvals, URL safety, cache, cost controls, audit logging, and cleanup.",
+    "developerName": "seungpyoson",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write",
+      "External Services"
+    ],
+    "defaultPrompt": [
+      "Read this web page through browser-fetch-router.",
+      "Use browser-fetch-router for this browser task."
+    ],
+    "websiteURL": "https://github.com/seungpyoson/browser-fetch-router",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}
+

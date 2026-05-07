@@ -1,0 +1,7 @@
+{
+  "name": "browser-fetch-router",
+  "description": "Shared browser and web-fetch router CLI for coding agents",
+  "version": "0.1.0",
+  "contextFileName": "AGENTS.md"
+}
+

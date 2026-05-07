@@ -75,12 +75,27 @@
     "schema": { "type": "object", "properties": { "--json": { "type": "boolean" } } },
     "install-agent": {
       "type": "object",
-      "required": ["agent"],
       "properties": {
         "agent": { "enum": ["claude", "codex", "gemini", "kimi", "opencode", "pi"] },
+        "--all": { "type": "boolean" },
+        "--select": { "type": "string", "description": "Comma-separated subset of claude,codex,gemini,kimi,opencode,pi" },
         "--force": { "type": "boolean" },
         "--adapter-path": { "type": "string" },
         "--json": { "type": "boolean" }
+      },
+      "oneOf": [
+        { "required": ["agent"] },
+        { "required": ["--all"] },
+        { "required": ["--select"] }
+      ],
+      "not": {
+        "anyOf": [
+          { "required": ["agent", "--all"] },
+          { "required": ["agent", "--select"] },
+          { "required": ["--all", "--select"] },
+          { "required": ["--all", "--adapter-path"] },
+          { "required": ["--select", "--adapter-path"] }
+        ]
       }
     }
   }
