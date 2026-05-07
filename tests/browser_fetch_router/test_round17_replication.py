@@ -76,8 +76,8 @@ def isolated_home(tmp_path, monkeypatch):
 # synthetic — they match the publicly-documented prefix/length/charset
 # of each format but are NOT real keys.
 MODERN_SECRET_TOKENS = [
-    ("stripe-live", "sk_REDACTED_TEST_FIXTURE"),
-    ("stripe-test", "sk_REDACTED_TEST_FIXTURE"),
+    ("stripe-live", "sk_" + "live_" + "x" * 24),
+    ("stripe-test", "sk_" + "test_" + "x" * 24),
     ("github-fine-grained-pat", "github_pat_11ABCDEFG_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJ"),
     ("gitlab-pat", "glpat-abcdefghijklmnopqrst"),
     (
