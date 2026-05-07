@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browser-fetch-router"
+version = "0.1.0"
+requires-python = ">=3.11"
+# Runtime dependencies — only what the codebase actually imports.
+# Anything declared here MUST appear in an `import` statement under
+# `browser_fetch_router/` (Gemini medium on commit f23f4b9: removed
+# previously-declared `httpx` and `websockets` which were both unused
+# at runtime). Future deps go in the same PR that wires the import —
+# declaring "for later" leaks attack surface and pulls transitive
+# dependencies for nothing.
+dependencies = [
+  "psutil>=5.9",
+]
+
+[project.scripts]
+browser-fetch-router = "browser_fetch_router.cli:main"
+read-web = "browser_fetch_router.cli:main"
+read-user-tabs = "browser_fetch_router.cli:main"
+interactive-browser = "browser_fetch_router.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["browser_fetch_router*"]
+
+[tool.setuptools.package-data]
+"browser_fetch_router" = ["schemas/*.json", "adapters/**/*.md"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+  "integration: integration and end-to-end tests",
+  "shell: tests that spawn shell subprocesses",
+  "unit: pure logic tests",
+]

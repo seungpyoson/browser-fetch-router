@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "browser-fetch-router v1 envelope",
+  "type": "object",
+  "required": ["schema_version", "command", "status", "url", "artifacts", "next_path", "error"],
+  "properties": {
+    "schema_version": { "const": "browser-fetch-router.v1" },
+    "command": { "type": "string" },
+    "status": { "type": "string" },
+    "url": { "type": ["string", "null"] },
+    "route": { "type": ["string", "null"] },
+    "provider": { "type": ["string", "null"] },
+    "title": { "type": ["string", "null"] },
+    "content_markdown": { "type": ["string", "null"] },
+    "artifacts": { "type": "array" },
+    "quality": { "type": ["object", "null"] },
+    "evidence": { "type": ["object", "null"] },
+    "approval": { "type": ["object", "null"] },
+    "next_path": { "enum": [null, "read-web", "read-user-tabs", "interactive-browser"] },
+    "error": { "type": ["object", "null"] }
+  },
+  "commandFlags": {
+    "read-web": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "--json": { "type": "boolean" },
+        "--no-cache": { "type": "boolean" },
+        "--allow-paid": { "type": "boolean" },
+        "--strict-side-effects": { "type": "boolean" },
+        "--allow-side-effects": { "type": "boolean" },
+        "--max-chars": { "type": "integer", "default": 50000 }
+      }
+    },
+    "read-user-tabs": {
+      "type": "object",
+      "properties": {
+        "tabs_command": { "enum": ["list", "read", "screenshot", "revoke"] },
+        "--json": { "type": "boolean" },
+        "--all": { "type": "boolean" },
+        "--show-all": { "type": "boolean" },
+        "--allow-remote-cdp": { "type": "boolean" },
+        "--approval-scope": { "type": "string" },
+        "--persist-approval": { "type": "boolean" },
+        "--max-chars": { "type": "integer", "default": 20000 },
+        "--output": { "type": "string" }
+      }
+    },
+    "interactive-browser": {
+      "type": "object",
+      "required": ["task"],
+      "properties": {
+        "task": { "type": "string" },
+        "--json": { "type": "boolean" },
+        "--provider": { "enum": ["local", "browserbase", "cloud"] },
+        "--allow-hosted-browser": { "type": "boolean" },
+        "--confirm-irreversible": { "type": "string" },
+        "--max-steps": { "type": "integer", "default": 10 },
+        "--max-duration-sec": { "type": "integer", "default": 300 },
+        "--max-cost-usd": { "type": "number", "default": 0.05 }
+      }
+    },
+    "doctor": { "type": "object", "properties": { "--json": { "type": "boolean" } } },
+    "cleanup": {
+      "type": "object",
+      "properties": {
+        "--all": { "type": "boolean" },
+        "--global-orphan-reap": { "type": "boolean" },
+        "--logs": { "type": "boolean" },
+        "--max-age-days": { "type": "integer", "default": 30 },
+        "--json": { "type": "boolean" }
+      }
+    },
+    "schema": { "type": "object", "properties": { "--json": { "type": "boolean" } } },
+    "install-agent": {
+      "type": "object",
+      "required": ["agent"],
+      "properties": {
+        "agent": { "enum": ["claude", "codex", "gemini", "kimi", "opencode", "pi"] },
+        "--force": { "type": "boolean" },
+        "--adapter-path": { "type": "string" },
+        "--json": { "type": "boolean" }
+      }
+    }
+  }
+}

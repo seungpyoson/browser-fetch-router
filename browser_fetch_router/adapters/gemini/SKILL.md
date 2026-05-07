@@ -1,0 +1,38 @@
+---
+name: browser-fetch-router
+description: Thin Gemini CLI adapter for the shared browser-fetch-router. Routing, approvals, cache, cost, and lifecycle stay in the shared CLI.
+---
+
+# Browser Fetch Router (Gemini CLI adapter)
+
+Invoke the shared `browser-fetch-router` CLI for any web fetch, tab read, or interactive browser task.
+
+## Required env per invocation
+
+- `BFR_AGENT=gemini`
+- `BFR_SESSION_ID=<uuid-or-ulid>` — one per Gemini task; reuse across calls.
+
+## Commands
+
+- `browser-fetch-router read-web <url> --json`
+- `browser-fetch-router read-user-tabs list --json`
+- `browser-fetch-router read-user-tabs read <url-or-tab-id> --json`
+- `browser-fetch-router interactive-browser "<task>" --json`
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | ok |
+| 1 | content blocked / not found / paywalled / insufficient |
+| 2 | approval_required or approval_denied |
+| 3 | tool_setup_failed |
+| 4 | unsafe_url_blocked |
+| 5 | cost_cap_exceeded or rate_limited |
+| 64 | usage_error |
+| 70 | internal_error |
+
+## Constraints
+
+- Do not call Gemini's built-in `google_web_search` for arbitrary fetches when `browser-fetch-router` would route the same URL — the shared CLI gives you per-route quality gates and cost ledgering.
+- Never embed Gemini API keys in adapter scripts.
