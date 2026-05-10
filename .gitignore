@@ -1,0 +1,16 @@
+# Python bytecode and packaging
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test and lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments (any name)
+.venv/
+.venv-*/
+
+# macOS
+.DS_Store
