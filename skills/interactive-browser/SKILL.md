@@ -19,6 +19,15 @@ BFR_AGENT=<agent-name> BFR_SESSION_ID="$session_id" \
   browser-fetch-router interactive-browser "<task description>" --json
 ```
 
+Optional flags (this mode is the highest-trust — set the safety/cost limits explicitly):
+
+- `--provider {local,browserbase,cloud}` — pick the browser backend; `local` keeps execution on the user's machine, the others use a hosted browser and require `--allow-hosted-browser`.
+- `--allow-hosted-browser` — required to opt into hosted-browser providers (`browserbase`, `cloud`).
+- `--confirm-irreversible TOKEN` — required when the action-tier classifier flags the task as irreversible (e.g. submit, purchase, delete). The TOKEN is supplied by the CLI on the first attempt; pass it back on retry to confirm.
+- `--max-steps N` — hard cap on action steps in the task. Defaults are conservative; raise only with explicit user direction.
+- `--max-duration-sec N` — hard wall-clock cap on the task.
+- `--max-cost-usd N` — hard spend cap (matters most for `browserbase` / `cloud` providers).
+
 ## When to escalate to this from read-* modes
 
 Only when:
@@ -26,6 +35,10 @@ Only when:
 - read-user-tabs cannot satisfy a read-only task (e.g. content is loaded by interaction the user has not yet performed).
 
 If the task is read-only, prefer read-web (public) or read-user-tabs (logged-in) — they are cheaper and lower-risk.
+
+## Diagnostics
+
+If a CLI call fails with exit code `3` (`tool_setup_failed`) or `70` (`internal_error`), run `browser-fetch-router doctor --json` — provider-config and browser-runtime issues surface there.
 
 ## Exit codes
 

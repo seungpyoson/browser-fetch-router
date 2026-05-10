@@ -25,6 +25,17 @@ BFR_AGENT=<agent-name> BFR_SESSION_ID="$session_id" \
   browser-fetch-router read-user-tabs read <url-or-tab-id> --json
 ```
 
+Optional flags:
+
+- `list`: `--all`, `--show-all` (include redacted entries), `--allow-remote-cdp`, `--approval-scope SCOPE`, `--persist-approval`.
+- `read`: `--max-chars N`, `--approval-scope SCOPE`, `--persist-approval`, `--allow-remote-cdp`.
+
+`--persist-approval` and `--approval-scope` control how broadly an approval is remembered — only set them when the user has explicitly granted scope wider than the current call.
+
+## Diagnostics
+
+If a CLI call fails with exit code `3` (`tool_setup_failed`) or `70` (`internal_error`), run `browser-fetch-router doctor --json` for setup/health diagnostics. CDP-specific failures often surface here (browser not running, wrong `BFR_CDP_URL`, etc.).
+
 ## Exit codes
 
 | Code | Meaning |

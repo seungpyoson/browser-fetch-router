@@ -21,7 +21,11 @@ BFR_AGENT=<agent-name> BFR_SESSION_ID="$session_id" \
   browser-fetch-router read-web <url> --json
 ```
 
-Optional flags: `--no-cache`, `--allow-paid`, `--strict-side-effects`, `--allow-side-effects`, `--max-chars N`.
+Optional flags: `--no-cache`, `--allow-paid`, `--strict-side-effects`, `--allow-side-effects`, `--max-chars N`. Side-effects flags (`--strict-side-effects`, `--allow-side-effects`) are read-web-specific and govern background writes such as cache persistence; they have no analogue on `read-user-tabs` or `interactive-browser`.
+
+## Diagnostics
+
+If a CLI call fails with exit code `3` (`tool_setup_failed`) or `70` (`internal_error`), run `browser-fetch-router doctor --json` for setup/health diagnostics, or `browser-fetch-router schema --json` to inspect the structured-output schema.
 
 ## Exit codes
 
