@@ -17,6 +17,14 @@ dependencies = [
   "psutil>=5.9",
 ]
 
+# Dev-only dependencies. Same discipline as runtime deps — every entry
+# below MUST be imported by code under `tests/` (verified by audit, not
+# convention). Pulled into CI and local dev via `pip install -e ".[dev]"`.
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
 [project.scripts]
 browser-fetch-router = "browser_fetch_router.cli:main"
 read-web = "browser_fetch_router.cli:main"
