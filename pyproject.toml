@@ -17,6 +17,19 @@ dependencies = [
   "psutil>=5.9",
 ]
 
+# Dev-only dependencies. Same discipline as runtime deps, bidirectional:
+#   (1) every entry below MUST be imported by code under `tests/`, and
+#   (2) every test import that is not stdlib, a sibling test module, or
+#       the package itself MUST appear here.
+# Verified by audit, not convention. Adding a test that imports e.g.
+# `pytest_asyncio` without declaring it here is the silent-failure mode
+# this comment exists to prevent. Pulled into CI and local dev via
+# `pip install -e ".[dev]"`.
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
 [project.scripts]
 browser-fetch-router = "browser_fetch_router.cli:main"
 read-web = "browser_fetch_router.cli:main"
