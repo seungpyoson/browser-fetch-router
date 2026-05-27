@@ -13,6 +13,16 @@ Date: 2026-05-28
 - Full baseline outside sandbox: `python3 -m pytest tests/browser_fetch_router` -> 655 passed.
 - Sandbox baseline note: same suite hit one macOS sandbox-only `psutil` process enumeration `PermissionError`; rerun outside sandbox passed.
 
+## Constitution Evidence
+
+Relevant constitution constraints from `.specify/memory/constitution.md`:
+
+- Shared CLI owns provider routing, URL safety, approvals, cache, cost controls, audit logging, lifecycle management, and install behavior; agent adapters and plugin manifests stay thin.
+- Test-first reliability: every bug fix starts with a failing behavior test through the public CLI or public Python interface; final verification includes `python3 -m pytest tests/browser_fetch_router`.
+- Portable installation contracts: installation behavior must be grounded in documented agent discovery contracts, not guessed local paths or host-specific directories.
+- Single path system design: prefer one systematic implementation path over parallel fallbacks or compatibility shims; work stays scoped to one issue or consolidated issue group.
+- Review/release workflow: root-cause claims for open reliability issues must be validated against current source and issue evidence before planning; implementation plans and completed work need the required external reviews before readiness.
+
 ## Issue #4 Evidence
 
 Issue #4 originally reported two classes:
@@ -25,13 +35,21 @@ Current `main` partially fixes class 1:
 - `.gitignore:1-15` ignores `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, test/lint caches, `.venv/`, and `.venv-*/`.
 - `git status --short` after current local flow is empty.
 - `git status --short --ignored` shows local generated artifacts are ignored, including `.venv-ci/`, `.pytest_cache/`, `.ruff_cache/`, `browser_fetch_router.egg-info/`, and `__pycache__/`.
-- Hardcoded tracked-path sweep: `git grep -nE '/Users/|/home/[A-Za-z0-9_-]+|C:\\Users'` returned no tracked-file matches.
+- Hardcoded tracked-path sweep for absolute macOS, Linux, and Windows user-home paths returned no tracked-file matches before this packet was added.
 
 Remaining #4 gap is class 2 plus documentation/verification:
 
 - README only documents package install/test basics; no install-agent discovery contract or safe contributor verification flow.
 - Docs contain write-containment contract for `--adapter-path`, but no default skill-discovery contract for supported agents.
 - Current install-agent defaults still encode guessed per-agent paths directly in `browser_fetch_router/install_agent.py:59-65`.
+
+Issue #4 acceptance criteria still need proof in the final PR:
+
+- standard contributor-local artifacts stay ignored after normal install/test flows;
+- tracked files contain no contributor-local absolute paths;
+- package installability still works outside the repo;
+- install-agent defaults are validated against real layouts or return clear `--adapter-path` guidance;
+- fresh clone plus standard install/test creates no committable artifacts and no silent-default failures.
 
 ## Issue #5 Evidence
 
@@ -66,8 +84,16 @@ Live smoke against temp HOME `/private/tmp/bfr-home.XyJ25J`:
 - Explicit `install-agent pi --json` in same temp HOME failed for `.config/pi/skills` even though `.pi/agent/skills` existed.
 - Explicit `install-agent kimi --json` in same temp HOME failed for `.kimi/skills`, with no inheritance warning or opt-in guidance.
 
+Override baseline in temp HOME `/private/tmp/bfr-override-home.xwKC5f`:
+
+- Setup created `pi-base/skills` and `kimi-base/skills`.
+- `PI_HOME=/private/tmp/bfr-override-home.xwKC5f/pi-base python3 -m browser_fetch_router install-agent pi --json` exited 0 and wrote `pi-base/skills/browser-fetch-router/SKILL.md`.
+- `KIMI_HOME=/private/tmp/bfr-override-home.xwKC5f/kimi-base python3 -m browser_fetch_router install-agent kimi --json` exited 0 and wrote `kimi-base/skills/browser-fetch-router/SKILL.md`.
+- Current env override semantics: each `*_HOME` env var points to the agent root that contains `skills/`; the installer appends `skills/browser-fetch-router/SKILL.md`.
+
 ## External Discovery Evidence
 
+- Accessed 2026-05-28 KST.
 - Claude Code docs: personal skills live at `~/.claude/skills/<skill-name>/SKILL.md`; project skills live at `.claude/skills/<skill-name>/SKILL.md`.
   Source: https://code.claude.com/docs/en/skills
 - Codex system skill-installer states installs go to `$CODEX_HOME/skills/<skill-name>`, defaulting to `~/.codex/skills`.
@@ -86,7 +112,7 @@ Live smoke against temp HOME `/private/tmp/bfr-home.XyJ25J`:
 Confirmed:
 
 1. Default installation policy is encoded as one list plus one hardcoded path map. It does not distinguish "safe default in --all" from "supported explicit agent".
-2. Kimi is treated as a default write target even though Kimi can inherit from Claude/Codex and a new `~/.kimi/skills` directory can change discovery precedence.
+2. Kimi's path is documented, but its default inclusion is a policy/UX defect: Kimi can inherit from Claude/Codex, and creating a new `~/.kimi/skills` directory changes brand-group precedence for users who intentionally rely on inheritance.
 3. Pi default points to `~/.config/pi/skills`, which contradicts current Pi docs and local layout.
 4. Tests validate current guessed paths by constructing matching env vars/directories; they do not encode vendor discovery contracts.
 5. Docs do not publish an install-agent support matrix, default policy, or "use --adapter-path when unverified" rule.
@@ -94,7 +120,7 @@ Confirmed:
 Rejected or partially mitigated:
 
 1. "No `.gitignore`" is stale on current `main`; generated local artifacts are currently ignored.
-2. Tracked contributor-local absolute paths were not found.
+2. Tracked contributor-local absolute paths were not found. Initial narrow sweep was expanded after review; the current tracked hit is only this packet's literal grep example, which must be removed before final hardcoded-path verification.
 3. `--adapter-path` write containment is covered by existing contract/tests and is not the root cause here.
 
 ## Consolidation Assessment
@@ -118,7 +144,8 @@ Implement one install-agent discovery policy:
 - Split supported agents from default `--all` agents.
 - Exclude Kimi from default `--all` unless explicit opt-in is used.
 - Keep explicit `install-agent kimi` and `--select kimi` working, but surface a warning/result note that writing `~/.kimi/skills` can override Claude/Codex brand-group inheritance.
-- Change Pi default to `~/.pi/agent/skills/browser-fetch-router/SKILL.md`, preserving `PI_HOME` override semantics if a clear base-directory contract is defined.
+- Change Pi default root to `~/.pi/agent`, so the destination becomes `~/.pi/agent/skills/browser-fetch-router/SKILL.md`.
+- Preserve env override semantics: `PI_HOME` and `KIMI_HOME` point to the agent root containing `skills/`; installer appends `skills/browser-fetch-router/SKILL.md`.
 - For agents whose default cannot be verified, return actionable `--adapter-path` guidance instead of silently inventing paths.
 - Add a docs support matrix for default path, explicit support, `--all` inclusion, env override, source evidence, and known caveats.
 - Update schema/help text if `--all` default set differs from full supported list.
@@ -130,10 +157,12 @@ Red tests before implementation:
 
 - `install-agent --all --json` in controlled temp HOME succeeds for default agents and reports Kimi as skipped/not default rather than failed.
 - Pi default resolves to `~/.pi/agent/skills/browser-fetch-router/SKILL.md`.
+- `PI_HOME=<root-with-skills>` preserves current override semantics.
 - Explicit `install-agent kimi --json` can write when explicitly requested and includes inheritance warning metadata.
+- `KIMI_HOME=<root-with-skills>` preserves current override semantics.
 - `--select kimi` remains accepted.
 - Schema/docs reflect default-vs-supported distinction.
-- Contributor artifact hygiene remains covered by `.gitignore` and hardcoded-path sweep.
+- Contributor artifact hygiene remains covered by `.gitignore` and a machine-path sweep that checks absolute user paths without embedding contributor-local paths in tracked docs.
 
 Live smoke after implementation:
 
@@ -145,11 +174,12 @@ Live smoke after implementation:
 - Explicit `browser-fetch-router install-agent pi --json`.
 - Explicit `browser-fetch-router install-agent kimi --json`.
 - `git status --short` after standard install/test flow.
-- Hardcoded-path sweep over tracked files.
+- Hardcoded-path sweep over tracked files, using patterns for absolute user/machine paths without leaving those literals in committed docs.
 
-## Open Questions For Reviewers
+## Decisions For Planning
 
-1. Is excluding Kimi from default `--all` the right single-path behavior, or should `--all` include Kimi but mark it skipped with an explicit status?
-2. Should `PI_HOME` mean Pi base home (`~/.pi`) or agent config root (`~/.pi/agent`) after changing the default?
-3. Should missing default directories for default agents remain hard failures, or should `--all --json` skip unverified agents with per-agent actionable messages?
-4. Should docs prefer agent-native paths or shared `.agents/skills` paths where vendors support them?
+1. Kimi is supported but not a default write target. `--all --json` must be reliable and must make Kimi's default-skip status visible instead of silently omitting or failing it.
+2. `PI_HOME` means Pi agent root containing `skills/`. Default root is `~/.pi/agent`.
+3. Default agents with missing verified roots should report actionable per-agent skipped/unverified entries in JSON; this avoids one unsupported local agent failing the whole multi-install flow.
+4. Agent-native paths are the default install targets. Shared `.agents/skills` paths remain documentation/context for future work or explicit `--adapter-path`, not default behavior in this issue.
+5. Project-local skill discovery is documented as vendor context but not added to `install-agent` default behavior in this issue; project-local install remains possible through explicit `--adapter-path` when it points at `SKILL.md`.
