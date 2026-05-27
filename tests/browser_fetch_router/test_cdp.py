@@ -284,7 +284,24 @@ def test_fetch_tab_text_uses_isolated_world(monkeypatch):
         "Runtime.evaluate",
     ]
     assert socket.sent[3]["params"]["contextId"] == 42
+    assert socket.sent[2]["params"]["grantUniversalAccess"] is False
+    assert "grantUniveralAccess" not in socket.sent[2]["params"]
     assert "document.body" in socket.sent[3]["params"]["expression"]
+
+
+def test_websocket_connect_maps_connect_failure_to_unavailable(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+    import websockets.sync.client as sync_client
+
+    def fail_connect(*_args, **_kwargs):
+        raise OSError("socket refused; cookie=secret")
+
+    monkeypatch.setattr(sync_client, "connect", fail_connect)
+
+    with pytest.raises(cdp_module.CdpWebSocketUnavailable) as exc:
+        cdp_module._websocket_connect("ws://127.0.0.1:9222/devtools/page/T1", timeout=0.01)
+
+    assert str(exc.value) == "cdp_websocket_connect_failed"
 
 
 def test_fetch_tab_screenshot_decodes_png_from_shared_cdp_client(monkeypatch):
@@ -317,3 +334,17 @@ def test_fetch_tab_screenshot_decodes_png_from_shared_cdp_client(monkeypatch):
         "Page.enable",
         "Page.captureScreenshot",
     ]
+
+
+def test_fetch_tab_screenshot_maps_relist_failure_to_unavailable(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    def fail_list(*_args, **_kwargs):
+        raise RuntimeError("cdp list failed; cookie=secret")
+
+    monkeypatch.setattr(cdp_module, "fetch_tab_list", fail_list)
+
+    with pytest.raises(cdp_module.CdpWebSocketUnavailable) as exc:
+        cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1")
+
+    assert str(exc.value) == "cdp_tab_list_failed"

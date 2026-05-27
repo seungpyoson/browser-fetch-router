@@ -344,14 +344,6 @@ def read_tab(
     try:
         from browser_fetch_router.cdp import fetch_tab_text  # local import to avoid websocket dep at import time
         result = fetch_tab_text(ws_url, base_url=base)
-    except NotImplementedError:
-        return envelope(
-            command="read-user-tabs",
-            status="tool_setup_failed",
-            url=url,
-            error={"code": "cdp_text_extraction_unavailable", "message": "Live CDP extraction requires the websockets dependency"},
-            evidence={"tab": tab},
-        )
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
         return _cdp_failure_envelope(
             exc,
@@ -436,13 +428,6 @@ def screenshot_tab(
     try:
         from browser_fetch_router.cdp import fetch_tab_screenshot
         png_bytes = fetch_tab_screenshot(base, tab.get("id") or target)
-    except NotImplementedError:
-        return envelope(
-            command="read-user-tabs",
-            status="tool_setup_failed",
-            url=url,
-            error={"code": "cdp_screenshot_unavailable", "message": "Live screenshot requires the websockets dependency"},
-        )
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
         return _cdp_failure_envelope(
             exc,

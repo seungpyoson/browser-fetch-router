@@ -200,7 +200,12 @@ def _websocket_connect(ws_url: str, *, timeout: float):
         return connect(ws_url, open_timeout=timeout, close_timeout=timeout)
     except TypeError:
         # Older sync-client releases accepted fewer timeout keyword arguments.
-        return connect(ws_url, open_timeout=timeout)
+        try:
+            return connect(ws_url, open_timeout=timeout)
+        except Exception as exc:
+            raise CdpWebSocketUnavailable("cdp_websocket_connect_failed") from exc
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_websocket_connect_failed") from exc
 
 
 def _send_cdp_command(
@@ -212,7 +217,10 @@ def _send_cdp_command(
     payload: dict[str, Any] = {"id": command_id, "method": method}
     if params is not None:
         payload["params"] = params
-    websocket.send(json.dumps(payload, separators=(",", ":")))
+    try:
+        websocket.send(json.dumps(payload, separators=(",", ":")))
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_websocket_write_failed") from exc
     for _ in range(100):
         try:
             raw = websocket.recv()
@@ -342,7 +350,7 @@ def fetch_tab_text(
             {
                 "frameId": frame_id,
                 "worldName": "browser-fetch-router",
-                "grantUniveralAccess": False,
+                "grantUniversalAccess": False,
             },
         )
         context_id = world.get("executionContextId")
@@ -381,7 +389,10 @@ def fetch_tab_screenshot(
     timeout: float = 3.0,
 ) -> bytes:
     """Capture screenshot via `Page.captureScreenshot` over the shared CDP path."""
-    tabs = fetch_tab_list(base_url, timeout=timeout)
+    try:
+        tabs = fetch_tab_list(base_url, timeout=timeout)
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_tab_list_failed") from exc
     page_tabs = [tab for tab in tabs if tab.get("type") == "page"]
     tab = None
     if target == "active":

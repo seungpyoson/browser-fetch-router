@@ -92,6 +92,24 @@ def test_read_tab_maps_unreachable_websocket_without_leaking_details(monkeypatch
     assert "cookie=secret" not in result["error"].get("message", "")
 
 
+def test_read_tab_maps_real_websocket_connect_failure_without_leaking_details(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+    import websockets.sync.client as sync_client
+
+    url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
+
+    def fail_connect(*_args, **_kwargs):
+        raise OSError("socket refused; cookie=secret")
+
+    monkeypatch.setattr(sync_client, "connect", fail_connect)
+
+    result = rut.read_tab(url, approval_scope=f"exact:{url}", session_id="sid-read-user-tabs")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_unreachable"
+    assert "cookie=secret" not in result["error"].get("message", "")
+
+
 def test_read_tab_maps_missing_websocket_dependency(monkeypatch, tmp_path):
     from browser_fetch_router import cdp
     from browser_fetch_router import read_user_tabs as rut
@@ -180,3 +198,28 @@ def test_screenshot_tab_writes_approved_png_atomically(monkeypatch, tmp_path):
     assert result["artifacts"] == [{"path": str(output), "kind": "image/png"}]
     assert output.read_bytes().startswith(b"\x89PNG")
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_screenshot_tab_maps_relist_failure_without_writing_output(monkeypatch, tmp_path):
+    from browser_fetch_router import cdp
+    from browser_fetch_router import read_user_tabs as rut
+
+    url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
+    output = tmp_path / "shot.png"
+
+    def fail_list(*_args, **_kwargs):
+        raise RuntimeError("cdp list failed; cookie=secret")
+
+    monkeypatch.setattr(cdp, "fetch_tab_list", fail_list)
+
+    result = rut.screenshot_tab(
+        url,
+        output=output,
+        approval_scope=f"exact:{url}",
+        session_id="sid-read-user-tabs",
+    )
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_unreachable"
+    assert "cookie=secret" not in result["error"].get("message", "")
+    assert not output.exists()
