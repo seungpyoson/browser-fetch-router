@@ -104,7 +104,7 @@
 - [x] T027 Verify package installability with `pip install .` from outside the repository using `pyproject.toml`
 - [x] T028 Verify installed CLI help with `browser-fetch-router --help` from outside the repository using `pyproject.toml`
 
-Verification note: T026 was executed. Result was `625 passed, 1 failed`; the
+Verification note: T026 was re-executed after review fixes. Result was `629 passed, 1 failed`; the
 single failure is the pre-existing macOS `psutil` permission error in
 `tests/browser_fetch_router/test_round3_replication.py::test_Q_run_cleanup_real_subprocess_lands_in_cleaned_bucket`.
 
