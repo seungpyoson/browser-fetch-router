@@ -21,3 +21,9 @@ multi-agent plugin.
 - Diagnostics: `browser-fetch-router doctor --json`
 - Schema: `browser-fetch-router schema --json`
 
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan:
+`specs/001-authenticated-browser-cdp/plan.md`
+<!-- SPECKIT END -->
