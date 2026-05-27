@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+dist/
+build/
 
 # Test and lint caches
 .pytest_cache/
@@ -11,6 +13,25 @@ __pycache__/
 # Virtual environments (any name)
 .venv/
 .venv-*/
+
+# Environment
+.env
+.env.*
+!.env.template
+
+# Local agent/tool artifacts
+.antigravitycli/
+.augmentignore
+.claude/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+opencode.json
+graphify-out/
+.graphify_*
+# Generated visual explainers only; authored docs should live outside this path.
+docs/superpowers/explainers/
 
 # macOS
 .DS_Store

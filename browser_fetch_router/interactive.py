@@ -127,6 +127,18 @@ def _suggested_fallback() -> str | None:
     return None
 
 
+def _provider_unavailable(provider: str, tier: str, **evidence: Any) -> dict[str, Any]:
+    return envelope(
+        command="interactive-browser",
+        status="tool_setup_failed",
+        error={
+            "code": "provider_unavailable",
+            "message": "No configured interactive browser provider can launch in this install.",
+        },
+        evidence={"provider": provider, "tier": tier, **evidence},
+    )
+
+
 def run_interactive_browser(
     task: str,
     *,
@@ -157,27 +169,20 @@ def run_interactive_browser(
     selected = provider or "local"
     if selected == "local":
         if not _local_browser_use_available():
-            return envelope(
-                command="interactive-browser",
-                status="tool_setup_failed",
-                error={
-                    "code": "browser_use_preconditions_failed",
-                    "message": "browser-use is not installed. Install it or pick --provider browserbase / cloud (with --allow-hosted-browser)",
-                    "suggested_provider": _suggested_fallback(),
-                },
-                evidence={"tier": tier, "task_excerpt": task[:120]},
+            return _provider_unavailable(
+                selected,
+                tier,
+                task_excerpt=task[:120],
+                suggested_provider=_suggested_fallback(),
             )
-        # Live local launch is intentionally deferred to a follow-up because
-        # spawning Chrome with a tool-owned profile + lifecycle registry
-        # requires careful integration testing.
-        return envelope(
-            command="interactive-browser",
-            status="tool_setup_failed",
-            error={
-                "code": "live_local_launch_pending",
-                "message": "browser-use local launcher is wired but not enabled in v1; enable with BFR_ENABLE_LIVE_BROWSER=1 once the sandbox probe in doctor reports OK",
+        return _provider_unavailable(
+            selected,
+            tier,
+            limits={
+                "max_steps": max_steps,
+                "max_duration_sec": max_duration_sec,
+                "max_cost_usd": max_cost_usd,
             },
-            evidence={"tier": tier, "limits": {"max_steps": max_steps, "max_duration_sec": max_duration_sec, "max_cost_usd": max_cost_usd}},
         )
 
     if selected in {"browserbase", "cloud"} and not allow_hosted_browser:
@@ -199,11 +204,10 @@ def run_interactive_browser(
                 status="quota_or_key_missing",
                 error={"code": "browserbase_credentials_missing"},
             )
-        return envelope(
-            command="interactive-browser",
-            status="tool_setup_failed",
-            error={"code": "browserbase_launch_pending", "message": "Browserbase remote launcher wired but disabled until live integration test passes"},
-            evidence={"tier": tier, "credentials_present": True},
+        return _provider_unavailable(
+            selected,
+            tier,
+            credentials_present=True,
         )
 
     if selected == "cloud":
@@ -214,11 +218,10 @@ def run_interactive_browser(
                 status="quota_or_key_missing",
                 error={"code": "browser_use_cloud_key_missing"},
             )
-        return envelope(
-            command="interactive-browser",
-            status="tool_setup_failed",
-            error={"code": "browser_use_cloud_launch_pending", "message": "Browser Use Cloud launcher wired but disabled until live integration test passes"},
-            evidence={"tier": tier, "credentials_present": True},
+        return _provider_unavailable(
+            selected,
+            tier,
+            credentials_present=True,
         )
 
     return envelope(

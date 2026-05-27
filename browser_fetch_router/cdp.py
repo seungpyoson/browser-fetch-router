@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -11,6 +13,9 @@ LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "[::1]"}
 # ceiling stops a malicious or runaway endpoint from exhausting memory when
 # the user passes --allow-remote-cdp.
 MAX_CDP_RESPONSE_BYTES = 1_048_576
+
+# Maximum unrelated CDP events to drain while waiting for a command response.
+_CDP_MAX_DRAIN_MESSAGES = 100
 
 
 class CdpResponseTooLarge(RuntimeError):
@@ -22,6 +27,41 @@ class CdpUnexpectedRedirect(RuntimeError):
     never redirects /json. Distinct from a transport-level UnsafeUrl so
     callers can surface a CDP-specific tool_setup_failed code without
     classifying the situation as an SSRF block."""
+
+
+class CdpWebSocketUrlInvalid(RuntimeError):
+    """The tab did not expose a usable DevTools WebSocket URL."""
+
+
+class CdpWebSocketUrlMismatch(RuntimeError):
+    """The tab WebSocket URL does not belong to the validated CDP base."""
+
+
+class CdpWebSocketUnavailable(RuntimeError):
+    """The DevTools WebSocket could not be opened or read."""
+
+
+class CdpWebSocketDependencyMissing(RuntimeError):
+    """The declared WebSocket runtime dependency is not importable."""
+
+
+class CdpProtocolError(RuntimeError):
+    """The DevTools protocol response was missing, malformed, or failed."""
+
+
+class CdpTabListMalformedJson(CdpProtocolError):
+    """The CDP /json endpoint returned a body that was not valid JSON."""
+
+
+class CdpTabMissingId(CdpProtocolError):
+    """The resolved CDP tab did not expose a non-empty tab id."""
+
+
+class CdpAuthorizationError(RuntimeError):
+    """The current tab URL was not authorized at extraction time."""
+
+
+UrlAuthorizer = Callable[[str], bool]
 
 
 def cdp_base_url(*, allow_remote: bool = False) -> str | None:
@@ -130,6 +170,154 @@ def cdp_base_url(*, allow_remote: bool = False) -> str | None:
     return value.rstrip("/")
 
 
+def _default_port(scheme: str) -> int | None:
+    if scheme in {"http", "ws"}:
+        return 80
+    if scheme in {"https", "wss"}:
+        return 443
+    return None
+
+
+def _effective_port(parsed) -> int | None:
+    return parsed.port if parsed.port is not None else _default_port(parsed.scheme)
+
+
+def validate_tab_websocket_url(ws_url: str, base_url: str) -> str:
+    """Validate a tab-level CDP WebSocket URL against the CDP HTTP base."""
+    if not isinstance(ws_url, str) or not ws_url.strip():
+        raise CdpWebSocketUrlInvalid("missing_tab_websocket_url")
+    candidate = ws_url.strip()
+    ws = urlsplit(candidate)
+    if ws.scheme not in {"ws", "wss"}:
+        raise CdpWebSocketUrlInvalid("invalid_tab_websocket_scheme")
+    if ws.username or ws.password:
+        raise CdpWebSocketUrlInvalid("embedded_credentials_not_allowed")
+    if not ws.hostname or not ws.path:
+        raise CdpWebSocketUrlInvalid("malformed_tab_websocket_url")
+    if ws.query or ws.fragment:
+        raise CdpWebSocketUrlInvalid("tab_websocket_url_must_not_include_query_or_fragment")
+
+    base = urlsplit(base_url)
+    if base.scheme not in {"http", "https"} or not base.hostname:
+        raise CdpWebSocketUrlMismatch("invalid_cdp_base_url")
+    expected_ws_scheme = "wss" if base.scheme == "https" else "ws"
+    if ws.scheme != expected_ws_scheme:
+        raise CdpWebSocketUrlMismatch("tab_websocket_scheme_mismatch")
+    if ws.hostname.lower() != base.hostname.lower():
+        raise CdpWebSocketUrlMismatch("tab_websocket_host_mismatch")
+    try:
+        ws_port = _effective_port(ws)
+    except ValueError as exc:
+        raise CdpWebSocketUrlInvalid("malformed_tab_websocket_url") from exc
+    try:
+        base_port = _effective_port(base)
+    except ValueError as exc:
+        raise CdpWebSocketUrlMismatch("invalid_cdp_base_url") from exc
+    if ws_port != base_port:
+        raise CdpWebSocketUrlMismatch("tab_websocket_port_mismatch")
+    return candidate
+
+
+def _websocket_connect(ws_url: str, *, timeout: float):
+    try:
+        from websockets.sync.client import connect
+    except Exception as exc:  # pragma: no cover - exercised by package install checks
+        raise CdpWebSocketDependencyMissing("websockets dependency is not installed") from exc
+    try:
+        return connect(ws_url, open_timeout=timeout, close_timeout=timeout)
+    except TypeError:
+        # Older sync-client releases accepted fewer timeout keyword arguments.
+        try:
+            return connect(ws_url, open_timeout=timeout)
+        except Exception as exc:
+            raise CdpWebSocketUnavailable("cdp_websocket_connect_failed") from exc
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_websocket_connect_failed") from exc
+
+
+def _send_cdp_command(
+    websocket: Any,
+    command_id: int,
+    method: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"id": command_id, "method": method}
+    if params is not None:
+        payload["params"] = params
+    try:
+        websocket.send(json.dumps(payload, separators=(",", ":")))
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_websocket_write_failed") from exc
+    for _ in range(_CDP_MAX_DRAIN_MESSAGES):
+        try:
+            raw = websocket.recv()
+        except Exception as exc:
+            raise CdpWebSocketUnavailable("cdp_websocket_read_failed") from exc
+        try:
+            message = json.loads(raw)
+        except Exception as exc:
+            raise CdpProtocolError(f"{method} returned invalid JSON") from exc
+        if not isinstance(message, dict) or message.get("id") != command_id:
+            continue
+        if "error" in message:
+            raise CdpProtocolError(f"{method} failed")
+        result = message.get("result")
+        if not isinstance(result, dict):
+            raise CdpProtocolError(f"{method} returned malformed result")
+        if "exceptionDetails" in result:
+            raise CdpProtocolError(f"{method} failed due to JS exception")
+        return result
+    raise CdpProtocolError(
+        f"{method} response not received after {_CDP_MAX_DRAIN_MESSAGES} messages"
+    )
+
+
+def _main_frame_from_tree(frame_tree: dict[str, Any]) -> tuple[str, str]:
+    try:
+        frame = frame_tree["frameTree"]["frame"]
+        frame_id = frame["id"]
+        frame_url = frame["url"]
+    except Exception as exc:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame") from exc
+    if not isinstance(frame_id, str) or not frame_id:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame")
+    if not isinstance(frame_url, str) or not frame_url:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame URL")
+    return frame_id, frame_url
+
+
+def _ensure_authorized_current_url(
+    url: str,
+    authorize_url: UrlAuthorizer | None,
+) -> None:
+    if authorize_url is None:
+        return
+    try:
+        allowed = authorize_url(url)
+    except Exception as exc:
+        raise CdpAuthorizationError("cdp_current_url_not_authorized") from exc
+    if not allowed:
+        raise CdpAuthorizationError("cdp_current_url_not_authorized")
+
+
+def _text_result_from_runtime(evaluated: dict[str, Any]) -> tuple[str, str]:
+    result = evaluated.get("result")
+    if not isinstance(result, dict):
+        raise CdpProtocolError("Runtime.evaluate returned malformed result")
+    value = result.get("value")
+    if not isinstance(value, dict):
+        raise CdpProtocolError("Runtime.evaluate returned malformed result")
+    current_url = value.get("url")
+    if not isinstance(current_url, str) or not current_url:
+        raise CdpProtocolError("Runtime.evaluate returned no page URL")
+    text = value.get("text", "")
+    if text is None:
+        text = ""
+    if not isinstance(text, str):
+        text = str(text)
+    return current_url, text
+
+
 def fetch_tab_list(base_url: str, *, timeout: float = 3.0) -> list[dict[str, Any]]:
     """GET <base>/json — DevTools `Browser.GetTargets`-equivalent endpoint.
 
@@ -192,7 +380,10 @@ def fetch_tab_list(base_url: str, *, timeout: float = 3.0) -> list[dict[str, Any
         if str(exc).startswith("unexpected_redirect"):
             raise CdpUnexpectedRedirect(str(exc)) from exc
         raise
-    raw = json.loads(response.text)
+    try:
+        raw = json.loads(response.text)
+    except json.JSONDecodeError as exc:
+        raise CdpTabListMalformedJson("cdp_tab_list_malformed_json") from exc
     if not isinstance(raw, list):
         return []
     out: list[dict[str, Any]] = []
@@ -211,20 +402,112 @@ def fetch_tab_list(base_url: str, *, timeout: float = 3.0) -> list[dict[str, Any
     return out
 
 
-def fetch_tab_text(ws_url: str) -> dict[str, Any]:
+def fetch_tab_text(
+    ws_url: str,
+    *,
+    base_url: str | None = None,
+    timeout: float = 3.0,
+    authorize_url: UrlAuthorizer | None = None,
+) -> dict[str, Any]:
     """Read tab text via CDP `Page.createIsolatedWorld` + `Runtime.evaluate`.
 
-    This is a security-sensitive path. Implementation needs a WebSocket
-    transport (Task 14 will add the runtime dep — declared in
-    pyproject.toml in the same PR that wires the import, per the
-    "no unused declared deps" rule) plus careful framing of
-    `document.body.innerText`-equivalent extraction inside an
-    isolated world so page JS cannot intercept the read.
+    The optional `base_url` lets callers enforce that the tab-level
+    WebSocket URL came from the same already-validated CDP endpoint used
+    to list tabs. Passing None is only for callers that already validated
+    `ws_url` at their own boundary.
     """
-    raise NotImplementedError("isolated_world_extraction_pending")
+    if base_url is not None:
+        ws_url = validate_tab_websocket_url(ws_url, base_url)
+    with _websocket_connect(ws_url, timeout=timeout) as websocket:
+        _send_cdp_command(websocket, 1, "Page.enable")
+        frame_tree = _send_cdp_command(websocket, 2, "Page.getFrameTree")
+        frame_id, frame_url = _main_frame_from_tree(frame_tree)
+        _ensure_authorized_current_url(frame_url, authorize_url)
+        world = _send_cdp_command(
+            websocket,
+            3,
+            "Page.createIsolatedWorld",
+            {
+                "frameId": frame_id,
+                "worldName": "browser-fetch-router",
+                "grantUniversalAccess": False,
+            },
+        )
+        context_id = world.get("executionContextId")
+        if not isinstance(context_id, int):
+            raise CdpProtocolError("Page.createIsolatedWorld returned no context")
+        evaluated = _send_cdp_command(
+            websocket,
+            4,
+            "Runtime.evaluate",
+            {
+                "contextId": context_id,
+                "returnByValue": True,
+                "awaitPromise": False,
+                "expression": (
+                    "(() => { const body = document.body; "
+                    "return { url: String(window.location.href || ''), "
+                    "text: body ? (body.innerText || body.textContent || '') : '' }; })()"
+                ),
+            },
+        )
+    runtime_url, text = _text_result_from_runtime(evaluated)
+    _ensure_authorized_current_url(runtime_url, authorize_url)
+    return {"text": text, "isolated_world": True}
 
 
-def fetch_tab_screenshot(base_url: str, target: str) -> bytes:
-    """Capture screenshot via `Page.captureScreenshot`. Live wiring deferred —
-    same gating reason as fetch_tab_text."""
-    raise NotImplementedError("cdp_screenshot_pending")
+def fetch_tab_screenshot(
+    base_url: str,
+    target: str,
+    *,
+    timeout: float = 3.0,
+    authorize_url: UrlAuthorizer | None = None,
+) -> bytes:
+    """Capture screenshot via `Page.captureScreenshot` over the shared CDP path."""
+    from browser_fetch_router.url_safety import SafetyError
+
+    try:
+        tabs = fetch_tab_list(base_url, timeout=timeout)
+    except SafetyError:
+        raise
+    except (CdpUnexpectedRedirect, CdpResponseTooLarge, CdpProtocolError):
+        raise
+    except Exception as exc:
+        raise CdpWebSocketUnavailable("cdp_tab_list_failed") from exc
+    page_tabs = [tab for tab in tabs if tab.get("type") == "page"]
+    tab = None
+    if target == "active":
+        tab = page_tabs[0] if page_tabs else None
+    if tab is None:
+        for candidate in tabs:
+            if candidate.get("id") == target or candidate.get("url") == target:
+                tab = candidate
+                break
+    if tab is None:
+        raise CdpProtocolError("target tab not found")
+    tab_url = tab.get("url") or ""
+    if not isinstance(tab_url, str):
+        tab_url = ""
+    _ensure_authorized_current_url(tab_url, authorize_url)
+    ws_url = validate_tab_websocket_url(tab.get("webSocketDebuggerUrl") or "", base_url)
+    with _websocket_connect(ws_url, timeout=timeout) as websocket:
+        _send_cdp_command(websocket, 1, "Page.enable")
+        frame_tree = _send_cdp_command(websocket, 2, "Page.getFrameTree")
+        _frame_id, frame_url = _main_frame_from_tree(frame_tree)
+        _ensure_authorized_current_url(frame_url, authorize_url)
+        captured = _send_cdp_command(
+            websocket,
+            3,
+            "Page.captureScreenshot",
+            {"format": "png", "fromSurface": True},
+        )
+        after_capture = _send_cdp_command(websocket, 4, "Page.getFrameTree")
+        _after_frame_id, after_url = _main_frame_from_tree(after_capture)
+        _ensure_authorized_current_url(after_url, authorize_url)
+    data = captured.get("data")
+    if not isinstance(data, str) or not data:
+        raise CdpProtocolError("Page.captureScreenshot returned no data")
+    try:
+        return base64.b64decode(data, validate=True)
+    except Exception as exc:
+        raise CdpProtocolError("Page.captureScreenshot returned invalid data") from exc
