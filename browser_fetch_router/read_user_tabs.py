@@ -387,7 +387,7 @@ def read_tab(
     # report tool_setup_failed rather than reading the page-level world.
     ws_url = tab.get("webSocketDebuggerUrl") or ""
     try:
-        validate_tab_websocket_url(ws_url, base)
+        ws_url = validate_tab_websocket_url(ws_url, base)
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
         return _cdp_failure_envelope(
             exc,
@@ -399,7 +399,7 @@ def read_tab(
         from browser_fetch_router.cdp import fetch_tab_text  # local import to avoid websocket dep at import time
         result = fetch_tab_text(
             ws_url,
-            base_url=base,
+            base_url=None,
             authorize_url=_current_url_authorizer(auth),
         )
     except CdpAuthorizationError:
@@ -408,7 +408,16 @@ def read_tab(
             approval_scope=approval_scope,
             tab_id=tab.get("id"),
         )
+    except SafetyError:
+        raise
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="text",
+            evidence={"tab_id": tab.get("id")},
+        )
+    except Exception as exc:
         return _cdp_failure_envelope(
             exc,
             url=url,
@@ -478,17 +487,16 @@ def screenshot_tab(
     )
     if error is not None:
         return error
-    ws_url = tab.get("webSocketDebuggerUrl")
-    if ws_url is not None:
-        try:
-            validate_tab_websocket_url(ws_url, base)
-        except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
-            return _cdp_failure_envelope(
-                exc,
-                url=url,
-                operation="screenshot",
-                evidence={"tab_id": tab.get("id")},
-            )
+    ws_url = tab.get("webSocketDebuggerUrl") or ""
+    try:
+        validate_tab_websocket_url(ws_url, base)
+    except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="screenshot",
+            evidence={"tab_id": tab.get("id")},
+        )
     try:
         from browser_fetch_router.cdp import fetch_tab_screenshot
         png_bytes = fetch_tab_screenshot(
@@ -502,7 +510,16 @@ def screenshot_tab(
             approval_scope=approval_scope,
             tab_id=tab.get("id"),
         )
+    except SafetyError:
+        raise
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="screenshot",
+            evidence={"tab_id": tab.get("id")},
+        )
+    except Exception as exc:
         return _cdp_failure_envelope(
             exc,
             url=url,

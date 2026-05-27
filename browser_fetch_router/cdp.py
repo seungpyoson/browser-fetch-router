@@ -14,6 +14,9 @@ LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "[::1]"}
 # the user passes --allow-remote-cdp.
 MAX_CDP_RESPONSE_BYTES = 1_048_576
 
+# Maximum unrelated CDP events to drain while waiting for a command response.
+_CDP_MAX_DRAIN_MESSAGES = 100
+
 
 class CdpResponseTooLarge(RuntimeError):
     pass
@@ -194,7 +197,15 @@ def validate_tab_websocket_url(ws_url: str, base_url: str) -> str:
         raise CdpWebSocketUrlMismatch("tab_websocket_scheme_mismatch")
     if ws.hostname.lower() != base.hostname.lower():
         raise CdpWebSocketUrlMismatch("tab_websocket_host_mismatch")
-    if _effective_port(ws) != _effective_port(base):
+    try:
+        ws_port = _effective_port(ws)
+    except ValueError as exc:
+        raise CdpWebSocketUrlInvalid("malformed_tab_websocket_url") from exc
+    try:
+        base_port = _effective_port(base)
+    except ValueError as exc:
+        raise CdpWebSocketUrlMismatch("invalid_cdp_base_url") from exc
+    if ws_port != base_port:
         raise CdpWebSocketUrlMismatch("tab_websocket_port_mismatch")
     return candidate
 
@@ -229,7 +240,7 @@ def _send_cdp_command(
         websocket.send(json.dumps(payload, separators=(",", ":")))
     except Exception as exc:
         raise CdpWebSocketUnavailable("cdp_websocket_write_failed") from exc
-    for _ in range(100):
+    for _ in range(_CDP_MAX_DRAIN_MESSAGES):
         try:
             raw = websocket.recv()
         except Exception as exc:
@@ -240,11 +251,13 @@ def _send_cdp_command(
             raise CdpProtocolError(f"{method} returned invalid JSON") from exc
         if not isinstance(message, dict) or message.get("id") != command_id:
             continue
-        if "error" in message or "exceptionDetails" in message:
+        if "error" in message:
             raise CdpProtocolError(f"{method} failed")
         result = message.get("result")
         if not isinstance(result, dict):
             raise CdpProtocolError(f"{method} returned malformed result")
+        if "exceptionDetails" in result:
+            raise CdpProtocolError(f"{method} failed due to JS exception")
         return result
     raise CdpProtocolError(f"{method} response not received")
 

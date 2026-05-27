@@ -239,7 +239,7 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
 
     # Make the auth gate succeed and short-circuit CDP to a fixed PNG
     auth = SimpleNamespace(
-        persistent_scopes=("exact:http://test/",),
+        persistent_scopes=("exact:https://test/",),
         exact_one_time_scopes=(),
     )
     monkeypatch.setattr(
@@ -247,8 +247,8 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
         "_resolve_and_authorize_tab",
         lambda *a, **k: (
             "http://127.0.0.1:9222",
-            "http://test/",
-            {"id": "t1"},
+            "https://test/",
+            {"id": "t1", "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/t1"},
             auth,
             None,
         ),

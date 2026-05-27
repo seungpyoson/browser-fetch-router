@@ -228,8 +228,10 @@ def test_validate_tab_websocket_url_accepts_matching_loopback_target():
         ("", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
         ("http://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
         ("ws://user:pass@127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
+        ("ws://127.0.0.1:notaport/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
         ("ws://example.com:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
         ("ws://127.0.0.1:9333/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
+        ("ws://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:notaport", "CdpWebSocketUrlMismatch"),
         ("wss://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
     ],
 )
@@ -256,6 +258,32 @@ class _FakeWebSocket:
 
     def recv(self):
         return json.dumps(self.responses.pop(0))
+
+
+def test_cdp_drain_limit_is_named_for_reviewable_tuning():
+    from browser_fetch_router import cdp as cdp_module
+
+    assert cdp_module._CDP_MAX_DRAIN_MESSAGES == 100
+
+
+def test_send_cdp_command_maps_runtime_exception_details_to_protocol_error():
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket(
+        [
+            {
+                "id": 4,
+                "result": {
+                    "exceptionDetails": {
+                        "text": "Uncaught",
+                    }
+                },
+            },
+        ]
+    )
+
+    with pytest.raises(cdp_module.CdpProtocolError, match="Runtime.evaluate failed"):
+        cdp_module._send_cdp_command(socket, 4, "Runtime.evaluate")
 
 
 def test_fetch_tab_text_uses_isolated_world(monkeypatch):
