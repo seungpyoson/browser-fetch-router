@@ -1,3 +1,8 @@
+import base64
+import json
+
+import pytest
+
 from browser_fetch_router.cdp import cdp_base_url
 
 
@@ -204,3 +209,111 @@ def test_fetch_tab_list_succeeds_under_cap():
     finally:
         server.shutdown()
 
+
+def test_validate_tab_websocket_url_accepts_matching_loopback_target():
+    from browser_fetch_router import cdp as cdp_module
+
+    assert (
+        cdp_module.validate_tab_websocket_url(
+            "ws://127.0.0.1:9222/devtools/page/T1",
+            "http://127.0.0.1:9222",
+        )
+        == "ws://127.0.0.1:9222/devtools/page/T1"
+    )
+
+
+@pytest.mark.parametrize(
+    ("ws_url", "base_url", "exc_type"),
+    [
+        ("", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
+        ("http://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
+        ("ws://user:pass@127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
+        ("ws://example.com:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
+        ("ws://127.0.0.1:9333/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
+        ("wss://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
+    ],
+)
+def test_validate_tab_websocket_url_rejects_unsafe_or_mismatched_targets(ws_url, base_url, exc_type):
+    from browser_fetch_router import cdp as cdp_module
+
+    with pytest.raises(getattr(cdp_module, exc_type)):
+        cdp_module.validate_tab_websocket_url(ws_url, base_url)
+
+
+class _FakeWebSocket:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.sent = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def send(self, payload):
+        self.sent.append(json.loads(payload))
+
+    def recv(self):
+        return json.dumps(self.responses.pop(0))
+
+
+def test_fetch_tab_text_uses_isolated_world(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket(
+        [
+            {"id": 1, "result": {}},
+            {"id": 2, "result": {"frameTree": {"frame": {"id": "FRAME1"}}}},
+            {"id": 3, "result": {"executionContextId": 42}},
+            {"id": 4, "result": {"result": {"type": "string", "value": "Private page text"}}},
+        ]
+    )
+    monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
+
+    result = cdp_module.fetch_tab_text(
+        "ws://127.0.0.1:9222/devtools/page/T1",
+        base_url="http://127.0.0.1:9222",
+    )
+
+    assert result == {"text": "Private page text", "isolated_world": True}
+    assert [message["method"] for message in socket.sent] == [
+        "Page.enable",
+        "Page.getFrameTree",
+        "Page.createIsolatedWorld",
+        "Runtime.evaluate",
+    ]
+    assert socket.sent[3]["params"]["contextId"] == 42
+    assert "document.body" in socket.sent[3]["params"]["expression"]
+
+
+def test_fetch_tab_screenshot_decodes_png_from_shared_cdp_client(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    png = b"\x89PNG\r\n\x1a\nshot"
+    socket = _FakeWebSocket(
+        [
+            {"id": 1, "result": {}},
+            {"id": 2, "result": {"data": base64.b64encode(png).decode("ascii")}},
+        ]
+    )
+    monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
+    monkeypatch.setattr(
+        cdp_module,
+        "fetch_tab_list",
+        lambda base_url, **_kw: [
+            {
+                "id": "T1",
+                "title": "Private",
+                "url": "https://example.com/",
+                "type": "page",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/T1",
+            }
+        ],
+    )
+
+    assert cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1") == png
+    assert [message["method"] for message in socket.sent] == [
+        "Page.enable",
+        "Page.captureScreenshot",
+    ]

@@ -24,6 +24,18 @@
      "http://127.0.0.1:8765/index.html"
    ```
 
+   On Linux, use the installed Chrome or Chromium binary instead:
+
+   ```bash
+   google-chrome \
+     --remote-debugging-port=9222 \
+     --user-data-dir=/tmp/bfr-cdp-profile \
+     "http://127.0.0.1:8765/index.html"
+   ```
+
+   If the host uses Chromium, replace `google-chrome` with
+   `chromium-browser` or `chromium`.
+
 4. Verify tab listing works:
 
    ```bash
@@ -71,6 +83,7 @@
 ## Required Verification
 
 ```bash
+python3 -m pytest tests/browser_fetch_router/test_cdp.py tests/browser_fetch_router/test_read_user_tabs.py tests/browser_fetch_router/test_interactive.py
 python3 -m pytest tests/browser_fetch_router
 ```
 

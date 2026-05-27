@@ -9,9 +9,9 @@
 
 **Purpose**: Prepare dependency metadata and test files without implementing CDP behavior.
 
-- [ ] T001 Add `websockets>=16,<17` runtime dependency in `pyproject.toml`
-- [ ] T002 [P] Create read/screenshot orchestration test module in `tests/browser_fetch_router/test_read_user_tabs.py`
-- [ ] T003 [P] Create interactive-browser capability test module in `tests/browser_fetch_router/test_interactive.py`
+- [x] T001 Add `websockets>=16,<17` runtime dependency in `pyproject.toml`
+- [x] T002 [P] Create read/screenshot orchestration test module in `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T003 [P] Create interactive-browser capability test module in `tests/browser_fetch_router/test_interactive.py`
 
 ---
 
@@ -21,10 +21,10 @@
 
 **Critical**: Complete this phase before any user story implementation.
 
-- [ ] T004 [P] Add failing WebSocket target validation tests for missing URL, embedded credentials, bad scheme, host mismatch, and port mismatch in `tests/browser_fetch_router/test_cdp.py`
-- [ ] T005 Add CDP protocol exception classes, sanitized error messages, and WebSocket target validation helper in `browser_fetch_router/cdp.py`
-- [ ] T006 Add shared CDP exception-to-envelope mapping helper for text and screenshot operations in `browser_fetch_router/read_user_tabs.py`
-- [ ] T007 Run the foundational focused tests from `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T004 [P] Add failing WebSocket target validation tests for missing URL, embedded credentials, bad scheme, host mismatch, and port mismatch in `tests/browser_fetch_router/test_cdp.py`
+- [x] T005 Add CDP protocol exception classes, sanitized error messages, and WebSocket target validation helper in `browser_fetch_router/cdp.py`
+- [x] T006 Add shared CDP exception-to-envelope mapping helper for text and screenshot operations in `browser_fetch_router/read_user_tabs.py`
+- [x] T007 Run the foundational focused tests from `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
 
 **Checkpoint**: Shared validation rejects unsafe or mismatched `webSocketDebuggerUrl` values before any WebSocket connection attempt.
 
@@ -38,15 +38,15 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [US1] Add failing CDP command-client test for `Page.enable`, `Page.getFrameTree`, `Page.createIsolatedWorld`, and `Runtime.evaluate` ordering in `tests/browser_fetch_router/test_cdp.py`
-- [ ] T009 [US1] Add failing approved `read_tab` success test including max-character truncation and no raw CDP response leakage in `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T008 [US1] Add failing CDP command-client test for `Page.enable`, `Page.getFrameTree`, `Page.createIsolatedWorld`, and `Runtime.evaluate` ordering in `tests/browser_fetch_router/test_cdp.py`
+- [x] T009 [US1] Add failing approved `read_tab` success test including max-character truncation and no raw CDP response leakage in `tests/browser_fetch_router/test_read_user_tabs.py`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement one synchronous CDP WebSocket command client using `websockets.sync.client.connect` in `browser_fetch_router/cdp.py`
-- [ ] T011 [US1] Implement `fetch_tab_text` with isolated-world text extraction in `browser_fetch_router/cdp.py`
-- [ ] T012 [US1] Wire `read_tab` to the implemented text extractor and preserve approval-before-read behavior in `browser_fetch_router/read_user_tabs.py`
-- [ ] T013 [US1] Run the User Story 1 focused tests in `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T010 [US1] Implement one synchronous CDP WebSocket command client using `websockets.sync.client.connect` in `browser_fetch_router/cdp.py`
+- [x] T011 [US1] Implement `fetch_tab_text` with isolated-world text extraction in `browser_fetch_router/cdp.py`
+- [x] T012 [US1] Wire `read_tab` to the implemented text extractor and preserve approval-before-read behavior in `browser_fetch_router/read_user_tabs.py`
+- [x] T013 [US1] Run the User Story 1 focused tests in `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
 
 **Checkpoint**: User Story 1 is independently functional and testable.
 
@@ -60,14 +60,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [US2] Add failing `read_tab` negative-path tests for invalid WebSocket URL, WebSocket URL mismatch, unreachable WebSocket, and sanitized `Runtime.evaluate` failure in `tests/browser_fetch_router/test_read_user_tabs.py`
-- [ ] T015 [US2] Add failing `interactive-browser` tests for local, browserbase, and cloud unavailable-provider status after approval gates in `tests/browser_fetch_router/test_interactive.py`
+- [x] T014 [US2] Add failing `read_tab` negative-path tests for invalid WebSocket URL, WebSocket URL mismatch, unreachable WebSocket, and sanitized `Runtime.evaluate` failure in `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T015 [US2] Add failing `interactive-browser` tests for local, browserbase, and cloud unavailable-provider status after approval gates in `tests/browser_fetch_router/test_interactive.py`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Implement precise text-read failure envelopes for validation, transport, and protocol errors in `browser_fetch_router/read_user_tabs.py`
-- [ ] T017 [US2] Update `run_interactive_browser` to report truthful provider-unavailable status without launching providers in `browser_fetch_router/interactive.py`
-- [ ] T018 [US2] Run the User Story 2 focused tests in `tests/browser_fetch_router/test_read_user_tabs.py` and `tests/browser_fetch_router/test_interactive.py`
+- [x] T016 [US2] Implement precise text-read failure envelopes for validation, transport, and protocol errors in `browser_fetch_router/read_user_tabs.py`
+- [x] T017 [US2] Update `run_interactive_browser` to report truthful provider-unavailable status without launching providers in `browser_fetch_router/interactive.py`
+- [x] T018 [US2] Run the User Story 2 focused tests in `tests/browser_fetch_router/test_read_user_tabs.py` and `tests/browser_fetch_router/test_interactive.py`
 
 **Checkpoint**: User Story 2 is independently functional and testable.
 
@@ -81,14 +81,14 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [US3] Add failing CDP screenshot command-client test for `Page.captureScreenshot` base64 decoding through the shared validated WebSocket path in `tests/browser_fetch_router/test_cdp.py`
-- [ ] T020 [US3] Add failing `screenshot_tab` orchestration tests for approval-before-capture, shared WebSocket validation failures, and atomic artifact output in `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T019 [US3] Add failing CDP screenshot command-client test for `Page.captureScreenshot` base64 decoding through the shared validated WebSocket path in `tests/browser_fetch_router/test_cdp.py`
+- [x] T020 [US3] Add failing `screenshot_tab` orchestration tests for approval-before-capture, shared WebSocket validation failures, and atomic artifact output in `tests/browser_fetch_router/test_read_user_tabs.py`
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Implement `fetch_tab_screenshot` through the shared CDP WebSocket client in `browser_fetch_router/cdp.py`
-- [ ] T022 [US3] Wire `screenshot_tab` to shared CDP transport error mapping and preserve output validation before capture in `browser_fetch_router/read_user_tabs.py`
-- [ ] T023 [US3] Run the User Story 3 focused tests in `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T021 [US3] Implement `fetch_tab_screenshot` through the shared CDP WebSocket client in `browser_fetch_router/cdp.py`
+- [x] T022 [US3] Wire `screenshot_tab` to shared CDP transport error mapping and preserve output validation before capture in `browser_fetch_router/read_user_tabs.py`
+- [x] T023 [US3] Run the User Story 3 focused tests in `tests/browser_fetch_router/test_cdp.py` and `tests/browser_fetch_router/test_read_user_tabs.py`
 
 **Checkpoint**: All three user stories are independently functional and testable.
 
@@ -98,11 +98,15 @@
 
 **Purpose**: Carry forward non-blocking reviewer notes and run release gates.
 
-- [ ] T024 [P] Clarify screenshot inherited transport failures, vanished-tab behavior, and no-change `read-user-tabs list` contract in `specs/001-authenticated-browser-cdp/contracts/read-user-tabs-cli.md`
-- [ ] T025 [P] Add Linux/Chromium launch alternative and final validation sequence to `specs/001-authenticated-browser-cdp/quickstart.md`
+- [x] T024 [P] Clarify screenshot inherited transport failures, vanished-tab behavior, and no-change `read-user-tabs list` contract in `specs/001-authenticated-browser-cdp/contracts/read-user-tabs-cli.md`
+- [x] T025 [P] Add Linux/Chromium launch alternative and final validation sequence to `specs/001-authenticated-browser-cdp/quickstart.md`
 - [ ] T026 Run full repository feature verification with `python3 -m pytest tests/browser_fetch_router` against `tests/browser_fetch_router`
-- [ ] T027 Verify package installability with `pip install .` from outside the repository using `pyproject.toml`
-- [ ] T028 Verify installed CLI help with `browser-fetch-router --help` from outside the repository using `pyproject.toml`
+- [x] T027 Verify package installability with `pip install .` from outside the repository using `pyproject.toml`
+- [x] T028 Verify installed CLI help with `browser-fetch-router --help` from outside the repository using `pyproject.toml`
+
+Verification note: T026 was executed. Result was `625 passed, 1 failed`; the
+single failure is the pre-existing macOS `psutil` permission error in
+`tests/browser_fetch_router/test_round3_replication.py::test_Q_run_cleanup_real_subprocess_lands_in_cleaned_bucket`.
 
 ---
 

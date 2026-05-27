@@ -2,6 +2,10 @@
 
 ## `read-user-tabs read`
 
+`read-user-tabs list` keeps its existing contract. This feature does not change
+list output semantics; it only relies on list results as the tab-resolution
+source for approved reads and screenshots.
+
 Command:
 
 ```bash
@@ -32,8 +36,8 @@ Required failure envelopes:
 - CDP unreachable: `status: "tool_setup_failed"`, `error.code: "cdp_unreachable"`.
 - Missing WebSocket runtime dependency: `status: "tool_setup_failed"`, `error.code: "cdp_websocket_dependency_missing"`.
 - Invalid or mismatched debugger WebSocket URL: `status: "tool_setup_failed"`, `error.code: "cdp_websocket_url_invalid"` or `"cdp_websocket_url_mismatch"`.
-- CDP protocol failure: `status: "tool_setup_failed"`, `error.code: "cdp_protocol_error"` with a bounded public message.
-- Text extraction failure: `status: "tool_setup_failed"`, `error.code: "cdp_text_extraction_failed"`.
+- CDP protocol or text extraction failure: `status: "tool_setup_failed"`, `error.code: "cdp_text_extraction_failed"` with a bounded public message.
+- Tab disappeared between list and read: `status: "tool_setup_failed"`, `error.code: "tab_not_found"` when resolution fails before capture, or `error.code: "cdp_text_extraction_failed"` when the target disappears after WebSocket selection.
 
 Contract rules:
 
@@ -72,10 +76,18 @@ Required failure envelopes:
 
 - Missing approval: same approval contract as text reads.
 - Unsafe output: existing `unsafe_output_destination` contract.
-- Missing WebSocket runtime dependency: `cdp_websocket_dependency_missing`.
-- Screenshot unsupported or protocol failure: `cdp_screenshot_failed` or
-  `cdp_protocol_error`; must not use the old dependency-only message unless the
-  dependency is actually missing.
+- CDP unreachable: same `cdp_unreachable` contract as text reads.
+- Missing WebSocket runtime dependency: same `cdp_websocket_dependency_missing`
+  contract as text reads.
+- Invalid or mismatched debugger WebSocket URL: same
+  `cdp_websocket_url_invalid` or `cdp_websocket_url_mismatch` contract as text
+  reads.
+- Screenshot unsupported or protocol failure: `cdp_screenshot_failed`; must not
+  use the old dependency-only message unless the dependency is actually missing.
+- Tab disappeared between list and screenshot: `status: "tool_setup_failed"`,
+  `error.code: "tab_not_found"` when resolution fails before capture, or
+  `error.code: "cdp_screenshot_failed"` when the target disappears after
+  WebSocket selection.
 
 Contract rules:
 
@@ -98,7 +110,7 @@ Unavailable provider envelope:
   "command": "interactive-browser",
   "status": "tool_setup_failed",
   "error": {
-    "code": "browser_provider_unavailable",
+    "code": "provider_unavailable",
     "message": "No configured interactive browser provider can launch in this install."
   },
   "evidence": {

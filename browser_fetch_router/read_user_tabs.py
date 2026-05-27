@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -14,6 +12,14 @@ from browser_fetch_router.approvals import (
     revoke_scope,
 )
 from browser_fetch_router.cdp import cdp_base_url, fetch_tab_list
+from browser_fetch_router.cdp import (
+    CdpProtocolError,
+    CdpWebSocketDependencyMissing,
+    CdpWebSocketUnavailable,
+    CdpWebSocketUrlInvalid,
+    CdpWebSocketUrlMismatch,
+    validate_tab_websocket_url,
+)
 from browser_fetch_router.default_deny import is_default_denied
 from browser_fetch_router.paths import (
     UnsafeDestination,
@@ -34,6 +40,40 @@ _NON_HTTP_SCHEMES_TO_REDACT = frozenset({
     "javascript", "data", "file", "chrome-extension", "moz-extension",
     "about", "blob", "view-source", "ftp", "ws", "wss",
 })
+
+
+def _cdp_failure_envelope(
+    exc: BaseException,
+    *,
+    url: str | None,
+    operation: str,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if isinstance(exc, CdpWebSocketUrlInvalid):
+        code = "cdp_websocket_url_invalid"
+        message = "Tab did not expose a valid CDP WebSocket URL."
+    elif isinstance(exc, CdpWebSocketUrlMismatch):
+        code = "cdp_websocket_url_mismatch"
+        message = "Tab CDP WebSocket URL did not match the validated CDP endpoint."
+    elif isinstance(exc, CdpWebSocketDependencyMissing):
+        code = "cdp_websocket_dependency_missing"
+        message = "websockets dependency is not installed."
+    elif isinstance(exc, CdpWebSocketUnavailable):
+        code = "cdp_unreachable"
+        message = "CDP WebSocket endpoint was unreachable."
+    elif isinstance(exc, CdpProtocolError):
+        code = "cdp_screenshot_failed" if operation == "screenshot" else "cdp_text_extraction_failed"
+        message = "CDP protocol command failed."
+    else:
+        code = "cdp_screenshot_failed" if operation == "screenshot" else "cdp_text_extraction_failed"
+        message = "CDP operation failed."
+    return envelope(
+        command="read-user-tabs",
+        status="tool_setup_failed",
+        url=url,
+        error={"code": code, "message": message},
+        evidence=evidence,
+    )
 
 
 def redact_tab_list(tabs: list[dict[str, Any]], *, show_all: bool = False) -> list[dict[str, Any]]:
@@ -291,9 +331,19 @@ def read_tab(
         return error
     # CDP text extraction is wired in cdp.fetch_tab_text; if unavailable we
     # report tool_setup_failed rather than reading the page-level world.
+    ws_url = tab.get("webSocketDebuggerUrl") or ""
+    try:
+        validate_tab_websocket_url(ws_url, base)
+    except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="text",
+            evidence={"tab_id": tab.get("id")},
+        )
     try:
         from browser_fetch_router.cdp import fetch_tab_text  # local import to avoid websocket dep at import time
-        result = fetch_tab_text(tab.get("webSocketDebuggerUrl") or "")
+        result = fetch_tab_text(ws_url, base_url=base)
     except NotImplementedError:
         return envelope(
             command="read-user-tabs",
@@ -301,6 +351,13 @@ def read_tab(
             url=url,
             error={"code": "cdp_text_extraction_unavailable", "message": "Live CDP extraction requires the websockets dependency"},
             evidence={"tab": tab},
+        )
+    except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="text",
+            evidence={"tab_id": tab.get("id")},
         )
     text = cap_content(result.get("text", ""), max_chars)
     return envelope(
@@ -365,6 +422,17 @@ def screenshot_tab(
     )
     if error is not None:
         return error
+    ws_url = tab.get("webSocketDebuggerUrl")
+    if ws_url is not None:
+        try:
+            validate_tab_websocket_url(ws_url, base)
+        except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
+            return _cdp_failure_envelope(
+                exc,
+                url=url,
+                operation="screenshot",
+                evidence={"tab_id": tab.get("id")},
+            )
     try:
         from browser_fetch_router.cdp import fetch_tab_screenshot
         png_bytes = fetch_tab_screenshot(base, tab.get("id") or target)
@@ -374,6 +442,13 @@ def screenshot_tab(
             status="tool_setup_failed",
             url=url,
             error={"code": "cdp_screenshot_unavailable", "message": "Live screenshot requires the websockets dependency"},
+        )
+    except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
+        return _cdp_failure_envelope(
+            exc,
+            url=url,
+            operation="screenshot",
+            evidence={"tab_id": tab.get("id")},
         )
     # Route through atomic_write_bytes (mode=0o600 set on the temp file
     # before os.replace) so the visible target file appears at 0o600
