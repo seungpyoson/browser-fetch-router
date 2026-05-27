@@ -30,7 +30,10 @@ add a static-guard test asserting that every bare hostname in the
 deny lists has its wildcard counterpart, so the next bare-hostname
 addition doesn't silently re-introduce the bypass.
 """
+
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import pytest
 
@@ -235,6 +238,10 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
     from browser_fetch_router import read_user_tabs
 
     # Make the auth gate succeed and short-circuit CDP to a fixed PNG
+    auth = SimpleNamespace(
+        persistent_scopes=("exact:http://test/",),
+        exact_one_time_scopes=(),
+    )
     monkeypatch.setattr(
         read_user_tabs,
         "_resolve_and_authorize_tab",
@@ -242,10 +249,7 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
             "http://127.0.0.1:9222",
             "http://test/",
             {"id": "t1"},
-            read_user_tabs._ReadAuthorization(
-                persistent_scopes=("exact:http://test/",),
-                exact_one_time_scopes=(),
-            ),
+            auth,
             None,
         ),
     )
@@ -254,6 +258,14 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
         "browser_fetch_router.cdp.fetch_tab_screenshot",
         lambda base, tab_id, **_kw: fake_png,
     )
+    real_atomic_write = read_user_tabs.atomic_write_bytes
+    atomic_calls = []
+
+    def spy_atomic_write(path, data, *, mode=0o600):
+        atomic_calls.append((path, data, mode))
+        return real_atomic_write(path, data, mode=mode)
+
+    monkeypatch.setattr(read_user_tabs, "atomic_write_bytes", spy_atomic_write)
 
     # Force a permissive umask so write_bytes would yield 0o644 in the
     # buggy path (so the assertion below has bite on any test runner).
@@ -273,6 +285,10 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
             session_id="contract-test-sid",
         )
         assert result["status"] == "ok", f"screenshot_tab not ok: {result}"
+        assert atomic_calls == [(output, fake_png, 0o600)], (
+            "screenshot_tab must route through atomic_write_bytes(mode=0o600), "
+            "not only create a final file with matching permissions."
+        )
         actual_mode = stat.S_IMODE(output.stat().st_mode)
         assert actual_mode == 0o600, (
             f"screenshot output created at mode {oct(actual_mode)} — "
