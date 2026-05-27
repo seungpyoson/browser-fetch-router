@@ -231,7 +231,7 @@ def test_validate_tab_websocket_url_accepts_matching_loopback_target():
         ("ws://127.0.0.1:notaport/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlInvalid"),
         ("ws://example.com:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
         ("ws://127.0.0.1:9333/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
-        ("ws://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:notaport", "CdpWebSocketUrlMismatch"),
+        ("wss://127.0.0.1:9222/devtools/page/T1", "https://127.0.0.1:notaport", "CdpWebSocketUrlMismatch"),
         ("wss://127.0.0.1:9222/devtools/page/T1", "http://127.0.0.1:9222", "CdpWebSocketUrlMismatch"),
     ],
 )
