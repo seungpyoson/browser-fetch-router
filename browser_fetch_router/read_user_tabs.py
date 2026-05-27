@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -13,6 +14,7 @@ from browser_fetch_router.approvals import (
 )
 from browser_fetch_router.cdp import cdp_base_url, fetch_tab_list
 from browser_fetch_router.cdp import (
+    CdpAuthorizationError,
     CdpProtocolError,
     CdpWebSocketDependencyMissing,
     CdpWebSocketUnavailable,
@@ -40,6 +42,64 @@ _NON_HTTP_SCHEMES_TO_REDACT = frozenset({
     "javascript", "data", "file", "chrome-extension", "moz-extension",
     "about", "blob", "view-source", "ftp", "ws", "wss",
 })
+
+
+@dataclass(frozen=True)
+class _ReadAuthorization:
+    persistent_scopes: tuple[str, ...]
+    exact_one_time_scopes: tuple[str, ...]
+
+
+def _authorization_for_request(
+    *,
+    approval_scope: str | None,
+    session_id: str | None,
+) -> _ReadAuthorization:
+    persistent = list_active_scopes(session_id=session_id or "")
+    exact_one_time: list[str] = []
+    if approval_scope:
+        norm = normalize_scope(approval_scope)
+        if norm.startswith("exact:"):
+            exact_one_time.append(norm)
+        else:
+            # Hostname/wildcard approvals must be explicitly persisted to
+            # apply to subsequent calls; for this single call they count too.
+            persistent.append(norm)
+    return _ReadAuthorization(
+        persistent_scopes=tuple(persistent),
+        exact_one_time_scopes=tuple(exact_one_time),
+    )
+
+
+def _is_url_authorized(url: str, auth: _ReadAuthorization) -> bool:
+    return can_read_url(
+        url,
+        list(auth.persistent_scopes),
+        exact_one_time=list(auth.exact_one_time_scopes),
+    )
+
+
+def _current_url_authorizer(auth: _ReadAuthorization):
+    def authorize(current_url: str) -> bool:
+        return _is_url_authorized(current_url, auth)
+
+    return authorize
+
+
+def _current_url_denial_envelope(
+    *,
+    url: str | None,
+    approval_scope: str | None,
+    tab_id: Any,
+) -> dict[str, Any]:
+    return envelope(
+        command="read-user-tabs",
+        status="approval_required",
+        url=url,
+        approval={"required": True, "scope": approval_scope},
+        error={"code": "approval_required_for_current_tab"},
+        evidence={"tab_id": tab_id},
+    )
 
 
 def _cdp_failure_envelope(
@@ -240,11 +300,11 @@ def _resolve_and_authorize_tab(
     persist_approval: bool,
     allow_remote_cdp: bool,
     session_id: str | None,
-) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[str | None, str | None, dict[str, Any] | None, _ReadAuthorization | None, dict[str, Any] | None]:
     """Resolve `target` to a tab and authorize the URL.
 
-    Returns `(base, url, tab_dict, None)` on success, or
-    `(None, None, None, error_envelope)` on any failure (CDP unreachable,
+    Returns `(base, url, tab_dict, auth_context, None)` on success, or
+    `(None, None, None, None, error_envelope)` on any failure (CDP unreachable,
     tab not found, approval required). Used by BOTH `read_tab` AND
     `screenshot_tab` so the approval check cannot be skipped on one path
     — previously `screenshot_tab` went straight to fetch_tab_screenshot
@@ -253,7 +313,7 @@ def _resolve_and_authorize_tab(
     """
     base = cdp_base_url(allow_remote=allow_remote_cdp)
     if base is None:
-        return None, None, None, envelope(
+        return None, None, None, None, envelope(
             command="read-user-tabs",
             status="tool_setup_failed",
             error={"code": "remote_cdp_not_allowed"},
@@ -264,31 +324,25 @@ def _resolve_and_authorize_tab(
         # SSRF / DNS rebinding from CDP layer must propagate.
         raise
     except Exception as exc:
-        return None, None, None, envelope(
+        return None, None, None, None, envelope(
             command="read-user-tabs",
             status="tool_setup_failed",
             error={"code": "cdp_unreachable", "message": str(exc)[:200]},
         )
     tab = _resolve_tab(target, tabs)
     if tab is None:
-        return None, None, None, envelope(
+        return None, None, None, None, envelope(
             command="read-user-tabs",
             status="tool_setup_failed",
             error={"code": "tab_not_found", "message": f"No tab matched {target!r}"},
         )
     url = tab.get("url") or ""
-    persistent = list_active_scopes(session_id=session_id or "")
-    exact_one_time: list[str] = []
-    if approval_scope:
-        norm = normalize_scope(approval_scope)
-        if norm.startswith("exact:"):
-            exact_one_time.append(norm)
-        else:
-            # Hostname/wildcard approvals must be explicitly persisted to
-            # apply to subsequent calls; for this single call they count too.
-            persistent.append(norm)
-    if not can_read_url(url, persistent, exact_one_time=exact_one_time):
-        return None, None, None, envelope(
+    auth = _authorization_for_request(
+        approval_scope=approval_scope,
+        session_id=session_id,
+    )
+    if not _is_url_authorized(url, auth):
+        return None, None, None, None, envelope(
             command="read-user-tabs",
             status="approval_required",
             url=url,
@@ -308,7 +362,7 @@ def _resolve_and_authorize_tab(
             session_id=session_id or "",
             persisted=bool(persist_approval),
         )
-    return base, url, tab, None
+    return base, url, tab, auth, None
 
 
 def read_tab(
@@ -320,7 +374,7 @@ def read_tab(
     max_chars: int = 20_000,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    base, url, tab, error = _resolve_and_authorize_tab(
+    base, url, tab, auth, error = _resolve_and_authorize_tab(
         target,
         approval_scope=approval_scope,
         persist_approval=persist_approval,
@@ -343,7 +397,17 @@ def read_tab(
         )
     try:
         from browser_fetch_router.cdp import fetch_tab_text  # local import to avoid websocket dep at import time
-        result = fetch_tab_text(ws_url, base_url=base)
+        result = fetch_tab_text(
+            ws_url,
+            base_url=base,
+            authorize_url=_current_url_authorizer(auth),
+        )
+    except CdpAuthorizationError:
+        return _current_url_denial_envelope(
+            url=url,
+            approval_scope=approval_scope,
+            tab_id=tab.get("id"),
+        )
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
         return _cdp_failure_envelope(
             exc,
@@ -405,7 +469,7 @@ def screenshot_tab(
             status="usage_error",
             error={"code": "output_parent_missing", "message": f"{output.parent} must exist"},
         )
-    base, url, tab, error = _resolve_and_authorize_tab(
+    base, url, tab, auth, error = _resolve_and_authorize_tab(
         target,
         approval_scope=approval_scope,
         persist_approval=persist_approval,
@@ -427,7 +491,17 @@ def screenshot_tab(
             )
     try:
         from browser_fetch_router.cdp import fetch_tab_screenshot
-        png_bytes = fetch_tab_screenshot(base, tab.get("id") or target)
+        png_bytes = fetch_tab_screenshot(
+            base,
+            tab.get("id") or target,
+            authorize_url=_current_url_authorizer(auth),
+        )
+    except CdpAuthorizationError:
+        return _current_url_denial_envelope(
+            url=url,
+            approval_scope=approval_scope,
+            tab_id=tab.get("id"),
+        )
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch, CdpWebSocketDependencyMissing, CdpWebSocketUnavailable, CdpProtocolError) as exc:
         return _cdp_failure_envelope(
             exc,

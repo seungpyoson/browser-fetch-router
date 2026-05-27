@@ -238,12 +238,21 @@ def test_r15_03_screenshot_output_is_created_at_0o600_not_chmod_after(
     monkeypatch.setattr(
         read_user_tabs,
         "_resolve_and_authorize_tab",
-        lambda *a, **k: ("http://127.0.0.1:9222", "http://test/", {"id": "t1"}, None),
+        lambda *a, **k: (
+            "http://127.0.0.1:9222",
+            "http://test/",
+            {"id": "t1"},
+            read_user_tabs._ReadAuthorization(
+                persistent_scopes=("exact:http://test/",),
+                exact_one_time_scopes=(),
+            ),
+            None,
+        ),
     )
     fake_png = b"\x89PNG\r\n\x1a\n" + b"x" * 100
     monkeypatch.setattr(
         "browser_fetch_router.cdp.fetch_tab_screenshot",
-        lambda base, tab_id: fake_png,
+        lambda base, tab_id, **_kw: fake_png,
     )
 
     # Force a permissive umask so write_bytes would yield 0o644 in the

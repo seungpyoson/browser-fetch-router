@@ -29,9 +29,10 @@ def test_read_tab_success_passes_base_url_and_omits_raw_cdp(monkeypatch, tmp_pat
 
     url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
 
-    def fake_fetch_tab_text(ws_url, *, base_url):
+    def fake_fetch_tab_text(ws_url, *, base_url, authorize_url):
         assert ws_url == "ws://127.0.0.1:9222/devtools/page/T1"
         assert base_url == "http://127.0.0.1:9222"
+        assert authorize_url(url) is True
         return {"text": "abcdef", "isolated_world": True, "raw": {"secret": "nope"}}
 
     monkeypatch.setattr(cdp, "fetch_tab_text", fake_fetch_tab_text)
@@ -146,6 +147,32 @@ def test_read_tab_maps_protocol_error_without_raw_cdp_payload(monkeypatch, tmp_p
     assert "cookie" not in result["error"].get("message", "")
 
 
+def test_read_tab_rechecks_current_url_before_returning_text(monkeypatch, tmp_path):
+    from browser_fetch_router import cdp
+    from browser_fetch_router import read_user_tabs as rut
+
+    url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
+
+    def fake_fetch_tab_text(ws_url, *, base_url, authorize_url):
+        assert ws_url == "ws://127.0.0.1:9222/devtools/page/T1"
+        assert base_url == "http://127.0.0.1:9222"
+        current_url = "https://mail.google.com/mail/u/0/#inbox"
+        assert authorize_url(current_url) is False
+        raise cdp.CdpAuthorizationError("cdp_current_url_not_authorized")
+
+    monkeypatch.setattr(cdp, "fetch_tab_text", fake_fetch_tab_text)
+
+    result = rut.read_tab(
+        url,
+        approval_scope=f"exact:{url}",
+        session_id="sid-read-user-tabs",
+    )
+
+    assert result["status"] == "approval_required"
+    assert result["error"]["code"] == "approval_required_for_current_tab"
+    assert result.get("content_markdown") is None
+
+
 def test_screenshot_tab_rejects_mismatched_websocket_url_before_capture(monkeypatch, tmp_path):
     from browser_fetch_router import cdp
     from browser_fetch_router import read_user_tabs as rut
@@ -185,7 +212,11 @@ def test_screenshot_tab_writes_approved_png_atomically(monkeypatch, tmp_path):
     url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
     output = tmp_path / "shot.png"
 
-    monkeypatch.setattr(cdp, "fetch_tab_screenshot", lambda _base, _target: b"\x89PNG\r\n\x1a\nok")
+    def fake_screenshot(_base, _target, *, authorize_url):
+        assert authorize_url(url) is True
+        return b"\x89PNG\r\n\x1a\nok"
+
+    monkeypatch.setattr(cdp, "fetch_tab_screenshot", fake_screenshot)
 
     result = rut.screenshot_tab(
         url,
@@ -222,4 +253,30 @@ def test_screenshot_tab_maps_relist_failure_without_writing_output(monkeypatch, 
     assert result["status"] == "tool_setup_failed"
     assert result["error"]["code"] == "cdp_unreachable"
     assert "cookie=secret" not in result["error"].get("message", "")
+    assert not output.exists()
+
+
+def test_screenshot_tab_rechecks_current_url_before_writing_output(monkeypatch, tmp_path):
+    from browser_fetch_router import cdp
+    from browser_fetch_router import read_user_tabs as rut
+
+    url = _patch_single_tab(monkeypatch, rut, tmp_path=tmp_path)
+    output = tmp_path / "shot.png"
+
+    def fake_screenshot(_base, _target, *, authorize_url):
+        current_url = "https://mail.google.com/mail/u/0/#inbox"
+        assert authorize_url(current_url) is False
+        raise cdp.CdpAuthorizationError("cdp_current_url_not_authorized")
+
+    monkeypatch.setattr(cdp, "fetch_tab_screenshot", fake_screenshot)
+
+    result = rut.screenshot_tab(
+        url,
+        output=output,
+        approval_scope=f"exact:{url}",
+        session_id="sid-read-user-tabs",
+    )
+
+    assert result["status"] == "approval_required"
+    assert result["error"]["code"] == "approval_required_for_current_tab"
     assert not output.exists()

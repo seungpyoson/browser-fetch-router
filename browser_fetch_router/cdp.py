@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -43,6 +44,13 @@ class CdpWebSocketDependencyMissing(RuntimeError):
 
 class CdpProtocolError(RuntimeError):
     """The DevTools protocol response was missing, malformed, or failed."""
+
+
+class CdpAuthorizationError(RuntimeError):
+    """The current tab URL was not authorized at extraction time."""
+
+
+UrlAuthorizer = Callable[[str], bool]
 
 
 def cdp_base_url(*, allow_remote: bool = False) -> str | None:
@@ -241,6 +249,52 @@ def _send_cdp_command(
     raise CdpProtocolError(f"{method} response not received")
 
 
+def _main_frame_from_tree(frame_tree: dict[str, Any]) -> tuple[str, str]:
+    try:
+        frame = frame_tree["frameTree"]["frame"]
+        frame_id = frame["id"]
+        frame_url = frame["url"]
+    except Exception as exc:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame") from exc
+    if not isinstance(frame_id, str) or not frame_id:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame")
+    if not isinstance(frame_url, str) or not frame_url:
+        raise CdpProtocolError("Page.getFrameTree returned no main frame URL")
+    return frame_id, frame_url
+
+
+def _ensure_authorized_current_url(
+    url: str,
+    authorize_url: UrlAuthorizer | None,
+) -> None:
+    if authorize_url is None:
+        return
+    try:
+        allowed = authorize_url(url)
+    except Exception as exc:
+        raise CdpAuthorizationError("cdp_current_url_not_authorized") from exc
+    if not allowed:
+        raise CdpAuthorizationError("cdp_current_url_not_authorized")
+
+
+def _text_result_from_runtime(evaluated: dict[str, Any]) -> tuple[str, str]:
+    result = evaluated.get("result")
+    if not isinstance(result, dict):
+        raise CdpProtocolError("Runtime.evaluate returned malformed result")
+    value = result.get("value")
+    if not isinstance(value, dict):
+        raise CdpProtocolError("Runtime.evaluate returned malformed result")
+    current_url = value.get("url")
+    if not isinstance(current_url, str) or not current_url:
+        raise CdpProtocolError("Runtime.evaluate returned no page URL")
+    text = value.get("text", "")
+    if text is None:
+        text = ""
+    if not isinstance(text, str):
+        text = str(text)
+    return current_url, text
+
+
 def fetch_tab_list(base_url: str, *, timeout: float = 3.0) -> list[dict[str, Any]]:
     """GET <base>/json — DevTools `Browser.GetTargets`-equivalent endpoint.
 
@@ -327,6 +381,7 @@ def fetch_tab_text(
     *,
     base_url: str | None = None,
     timeout: float = 3.0,
+    authorize_url: UrlAuthorizer | None = None,
 ) -> dict[str, Any]:
     """Read tab text via CDP `Page.createIsolatedWorld` + `Runtime.evaluate`.
 
@@ -339,10 +394,8 @@ def fetch_tab_text(
     with _websocket_connect(ws_url, timeout=timeout) as websocket:
         _send_cdp_command(websocket, 1, "Page.enable")
         frame_tree = _send_cdp_command(websocket, 2, "Page.getFrameTree")
-        try:
-            frame_id = frame_tree["frameTree"]["frame"]["id"]
-        except Exception as exc:
-            raise CdpProtocolError("Page.getFrameTree returned no main frame") from exc
+        frame_id, frame_url = _main_frame_from_tree(frame_tree)
+        _ensure_authorized_current_url(frame_url, authorize_url)
         world = _send_cdp_command(
             websocket,
             3,
@@ -366,20 +419,14 @@ def fetch_tab_text(
                 "awaitPromise": False,
                 "expression": (
                     "(() => { const body = document.body; "
-                    "if (!body) return ''; "
-                    "return body.innerText || body.textContent || ''; })()"
+                    "return { url: String(window.location.href || ''), "
+                    "text: body ? (body.innerText || body.textContent || '') : '' }; })()"
                 ),
             },
         )
-    result = evaluated.get("result")
-    if not isinstance(result, dict):
-        raise CdpProtocolError("Runtime.evaluate returned malformed result")
-    value = result.get("value", "")
-    if value is None:
-        value = ""
-    if not isinstance(value, str):
-        value = str(value)
-    return {"text": value, "isolated_world": True}
+    runtime_url, text = _text_result_from_runtime(evaluated)
+    _ensure_authorized_current_url(runtime_url, authorize_url)
+    return {"text": text, "isolated_world": True}
 
 
 def fetch_tab_screenshot(
@@ -387,10 +434,15 @@ def fetch_tab_screenshot(
     target: str,
     *,
     timeout: float = 3.0,
+    authorize_url: UrlAuthorizer | None = None,
 ) -> bytes:
     """Capture screenshot via `Page.captureScreenshot` over the shared CDP path."""
+    from browser_fetch_router.url_safety import SafetyError
+
     try:
         tabs = fetch_tab_list(base_url, timeout=timeout)
+    except SafetyError:
+        raise
     except Exception as exc:
         raise CdpWebSocketUnavailable("cdp_tab_list_failed") from exc
     page_tabs = [tab for tab in tabs if tab.get("type") == "page"]
@@ -404,15 +456,25 @@ def fetch_tab_screenshot(
                 break
     if tab is None:
         raise CdpProtocolError("target tab not found")
+    tab_url = tab.get("url") or ""
+    if not isinstance(tab_url, str):
+        tab_url = ""
+    _ensure_authorized_current_url(tab_url, authorize_url)
     ws_url = validate_tab_websocket_url(tab.get("webSocketDebuggerUrl") or "", base_url)
     with _websocket_connect(ws_url, timeout=timeout) as websocket:
         _send_cdp_command(websocket, 1, "Page.enable")
+        frame_tree = _send_cdp_command(websocket, 2, "Page.getFrameTree")
+        _frame_id, frame_url = _main_frame_from_tree(frame_tree)
+        _ensure_authorized_current_url(frame_url, authorize_url)
         captured = _send_cdp_command(
             websocket,
-            2,
+            3,
             "Page.captureScreenshot",
             {"format": "png", "fromSurface": True},
         )
+        after_capture = _send_cdp_command(websocket, 4, "Page.getFrameTree")
+        _after_frame_id, after_url = _main_frame_from_tree(after_capture)
+        _ensure_authorized_current_url(after_url, authorize_url)
     data = captured.get("data")
     if not isinstance(data, str) or not data:
         raise CdpProtocolError("Page.captureScreenshot returned no data")

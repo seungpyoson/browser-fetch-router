@@ -264,9 +264,30 @@ def test_fetch_tab_text_uses_isolated_world(monkeypatch):
     socket = _FakeWebSocket(
         [
             {"id": 1, "result": {}},
-            {"id": 2, "result": {"frameTree": {"frame": {"id": "FRAME1"}}}},
+            {
+                "id": 2,
+                "result": {
+                    "frameTree": {
+                        "frame": {
+                            "id": "FRAME1",
+                            "url": "https://news.ycombinator.com/",
+                        }
+                    }
+                },
+            },
             {"id": 3, "result": {"executionContextId": 42}},
-            {"id": 4, "result": {"result": {"type": "string", "value": "Private page text"}}},
+            {
+                "id": 4,
+                "result": {
+                    "result": {
+                        "type": "object",
+                        "value": {
+                            "url": "https://news.ycombinator.com/",
+                            "text": "Private page text",
+                        },
+                    }
+                },
+            },
         ]
     )
     monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
@@ -287,6 +308,84 @@ def test_fetch_tab_text_uses_isolated_world(monkeypatch):
     assert socket.sent[2]["params"]["grantUniversalAccess"] is False
     assert "grantUniveralAccess" not in socket.sent[2]["params"]
     assert "document.body" in socket.sent[3]["params"]["expression"]
+
+
+def test_fetch_tab_text_denies_unauthorized_frame_url_before_evaluate(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket(
+        [
+            {"id": 1, "result": {}},
+            {
+                "id": 2,
+                "result": {
+                    "frameTree": {
+                        "frame": {
+                            "id": "FRAME1",
+                            "url": "https://mail.google.com/mail/u/0/#inbox",
+                        }
+                    }
+                },
+            },
+        ]
+    )
+    monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
+
+    with pytest.raises(cdp_module.CdpAuthorizationError):
+        cdp_module.fetch_tab_text(
+            "ws://127.0.0.1:9222/devtools/page/T1",
+            base_url="http://127.0.0.1:9222",
+            authorize_url=lambda url: url == "https://news.ycombinator.com/",
+        )
+
+    assert [message["method"] for message in socket.sent] == [
+        "Page.enable",
+        "Page.getFrameTree",
+    ]
+
+
+def test_fetch_tab_text_denies_unauthorized_runtime_url(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket(
+        [
+            {"id": 1, "result": {}},
+            {
+                "id": 2,
+                "result": {
+                    "frameTree": {
+                        "frame": {
+                            "id": "FRAME1",
+                            "url": "https://news.ycombinator.com/",
+                        }
+                    }
+                },
+            },
+            {"id": 3, "result": {"executionContextId": 42}},
+            {
+                "id": 4,
+                "result": {
+                    "result": {
+                        "type": "object",
+                        "value": {
+                            "url": "https://mail.google.com/mail/u/0/#inbox",
+                            "text": "secret inbox",
+                        },
+                    }
+                },
+            },
+        ]
+    )
+    monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
+
+    with pytest.raises(cdp_module.CdpAuthorizationError):
+        cdp_module.fetch_tab_text(
+            "ws://127.0.0.1:9222/devtools/page/T1",
+            base_url="http://127.0.0.1:9222",
+            authorize_url=lambda url: url == "https://news.ycombinator.com/",
+        )
+
+    assert socket.sent[-1]["method"] == "Runtime.evaluate"
 
 
 def test_websocket_connect_maps_connect_failure_to_unavailable(monkeypatch):
@@ -311,7 +410,29 @@ def test_fetch_tab_screenshot_decodes_png_from_shared_cdp_client(monkeypatch):
     socket = _FakeWebSocket(
         [
             {"id": 1, "result": {}},
-            {"id": 2, "result": {"data": base64.b64encode(png).decode("ascii")}},
+            {
+                "id": 2,
+                "result": {
+                    "frameTree": {
+                        "frame": {
+                            "id": "FRAME1",
+                            "url": "https://example.com/",
+                        }
+                    }
+                },
+            },
+            {"id": 3, "result": {"data": base64.b64encode(png).decode("ascii")}},
+            {
+                "id": 4,
+                "result": {
+                    "frameTree": {
+                        "frame": {
+                            "id": "FRAME1",
+                            "url": "https://example.com/",
+                        }
+                    }
+                },
+            },
         ]
     )
     monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
@@ -332,8 +453,39 @@ def test_fetch_tab_screenshot_decodes_png_from_shared_cdp_client(monkeypatch):
     assert cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1") == png
     assert [message["method"] for message in socket.sent] == [
         "Page.enable",
+        "Page.getFrameTree",
         "Page.captureScreenshot",
+        "Page.getFrameTree",
     ]
+
+
+def test_fetch_tab_screenshot_denies_unauthorized_relisted_url_before_capture(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket([])
+    monkeypatch.setattr(cdp_module, "_websocket_connect", lambda *_a, **_k: socket)
+    monkeypatch.setattr(
+        cdp_module,
+        "fetch_tab_list",
+        lambda base_url, **_kw: [
+            {
+                "id": "T1",
+                "title": "Mail",
+                "url": "https://mail.google.com/mail/u/0/#inbox",
+                "type": "page",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/T1",
+            }
+        ],
+    )
+
+    with pytest.raises(cdp_module.CdpAuthorizationError):
+        cdp_module.fetch_tab_screenshot(
+            "http://127.0.0.1:9222",
+            "T1",
+            authorize_url=lambda url: url == "https://news.ycombinator.com/",
+        )
+
+    assert socket.sent == []
 
 
 def test_fetch_tab_screenshot_maps_relist_failure_to_unavailable(monkeypatch):
@@ -348,3 +500,16 @@ def test_fetch_tab_screenshot_maps_relist_failure_to_unavailable(monkeypatch):
         cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1")
 
     assert str(exc.value) == "cdp_tab_list_failed"
+
+
+def test_fetch_tab_screenshot_preserves_safety_error_from_relist(monkeypatch):
+    from browser_fetch_router import cdp as cdp_module
+    from browser_fetch_router.url_safety import SafetyError
+
+    def fail_list(*_args, **_kwargs):
+        raise SafetyError("blocked private address")
+
+    monkeypatch.setattr(cdp_module, "fetch_tab_list", fail_list)
+
+    with pytest.raises(SafetyError):
+        cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1")
