@@ -215,3 +215,79 @@ Live smoke after implementation:
 3. Default agents with missing verified roots should report actionable per-agent skipped/unverified entries in JSON; this avoids one unsupported local agent failing the whole multi-install flow.
 4. Agent-native paths are the default install targets. Shared `.agents/skills` paths remain documentation/context for future work or explicit `--adapter-path`, not default behavior in this issue.
 5. Project-local skill discovery is documented as vendor context but not added to `install-agent` default behavior in this issue; project-local install remains possible through explicit `--adapter-path` when it points at `SKILL.md`.
+
+## Plan Review Gate
+
+Recorded 2026-05-28 KST before implementation:
+
+- Claude plan review `72023019-74fd-4a2e-ad5f-571caf1c4f31`: APPROVE. Carry-forward notes added to tasks: aggregate status edge case, explicit Kimi behavior without a preexisting brand root, red-test coverage, stable order, and Pi migration note.
+- Gemini plan review `0ef3ed03-24f8-4c4b-b4a9-8b7662fac903`: APPROVE. No blocking findings.
+- Grok plan review `job_d6511584-eda7-4a34-ad74-7d7ad44d307e`: APPROVE. Non-blocking note was implementation review still pending, which remains a final gate.
+- GLM plan review `job_e6d6bb87-b0ba-4571-b98b-3e0fd1cd53db`: APPROVE. Carry-forward notes added to tasks: explicit single-agent behavior, `--force` in multi modes, Pi migration, verified/unverified source distinction, adapter-path edge docs, evidence notes, and multi-model bottleneck.
+- DeepSeek plan review `job_27240a1e-3afc-4bc8-8b83-1b2c8714669c`: APPROVE. Carry-forward notes added to tasks: supported explicit-only skip semantics and default-agent missing-root smoke coverage.
+
+## Implementation Verification Evidence
+
+Recorded 2026-05-28 KST. Temp directories are abstracted as `<venv-temp>` and
+`<live-home>` to avoid committing machine-local absolute paths.
+
+TDD red/green evidence:
+
+- Red: `python3 -m pytest tests/browser_fetch_router/test_install_agent.py -k skips_kimi`
+  exited 1. Failure: default `--all` returned exit 3 instead of 0 because Kimi
+  and Pi both failed as `agent_adapter_path_unverified`.
+- Green: same command exited 0 after adding default-mode Kimi skip and Pi root
+  policy.
+- Red: `python3 -m pytest tests/browser_fetch_router/test_install_agent.py -k 'kimi_creates or select_kimi'`
+  exited 1. Failure: explicit Kimi returned `tool_setup_failed` when `.kimi/skills`
+  was absent and did not include warning metadata.
+- Green: same command exited 0 after adding explicit Kimi opt-in root creation
+  and warning metadata.
+
+Local verification:
+
+- `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` exited 0:
+  `26 passed`.
+- `python3 -m pytest tests/browser_fetch_router` inside the sandbox exited 1
+  because the macOS `psutil` process-enumeration cleanup test hit
+  `PermissionError`.
+- `python3 -m pytest tests/browser_fetch_router` outside the sandbox exited 0:
+  `668 passed`.
+- `python3 -m compileall -q browser_fetch_router tests/browser_fetch_router/test_install_agent.py`
+  exited 0.
+- `git diff --check` exited 0.
+- `git grep -nE '<machine-local-path-patterns>'` exited 1 with no tracked-file
+  matches.
+
+Package installability:
+
+- Direct `python3 -m pip install <checkout>` from outside the repository exited
+  1 because the active Python is PEP 668 externally managed.
+- In `<venv-temp>`, `<venv>/bin/pip install <checkout>` exited 0. Summary:
+  built `browser-fetch-router-0.1.0` and installed runtime dependencies.
+- In `<venv-temp>`, `<venv>/bin/browser-fetch-router --help` exited 0 and
+  listed the expected top-level commands.
+
+Installed-package live smoke:
+
+- `<venv>/bin/browser-fetch-router install-agent --help` exited 0 and showed
+  default-agent, explicit selection, force, and `SKILL.md` adapter-path help.
+- `HOME=<live-home> <venv>/bin/browser-fetch-router install-agent --all --force --json`
+  exited 0. Summary: aggregate `status=ok`; Claude, Codex, Gemini, OpenCode,
+  and Pi wrote adapters; Kimi was visible as `status=skipped` with
+  `default_disabled`.
+- `HOME=<live-home> <venv>/bin/browser-fetch-router install-agent pi --force --json`
+  exited 0 and wrote `<live-home>/.pi/agent/skills/browser-fetch-router/SKILL.md`.
+- `HOME=<live-home> <venv>/bin/browser-fetch-router install-agent kimi --force --json`
+  exited 0 and wrote `<live-home>/.kimi/skills/browser-fetch-router/SKILL.md`
+  with warning code `kimi_brand_root_inheritance`.
+- With `CODEX_HOME`, `GEMINI_HOME`, `OPENCODE_HOME`, `PI_HOME`, and `KIMI_HOME`
+  pointing at roots containing `skills/`, `<venv>/bin/browser-fetch-router install-agent --select codex,gemini,opencode,pi,kimi --force --json`
+  exited 0 and wrote all five adapters under the env-provided roots; Kimi kept
+  warning code `kimi_brand_root_inheritance`.
+
+Generated artifact hygiene:
+
+- `git status --short --ignored` showed only intended implementation files as
+  uncommitted changes plus ignored generated directories such as `.pytest_cache`,
+  bytecode caches, virtualenvs, `browser_fetch_router.egg-info`, and `build/`.

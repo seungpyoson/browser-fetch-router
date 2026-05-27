@@ -11,8 +11,8 @@
 
 **Purpose**: Confirm current planning gate and scope before implementation.
 
-- [ ] T001 Record the five plan-review approvals and non-blocking carry-forward notes in specs/002-install-agent-readiness/root-cause.md
-- [ ] T002 Inspect current install-agent CLI/schema touchpoints in browser_fetch_router/install_agent.py, browser_fetch_router/cli.py, browser_fetch_router/schema.py, and browser_fetch_router/schemas/v1.json
+- [x] T001 Record the five plan-review approvals and non-blocking carry-forward notes in specs/002-install-agent-readiness/root-cause.md
+- [x] T002 Inspect current install-agent CLI/schema touchpoints in browser_fetch_router/install_agent.py, browser_fetch_router/cli.py, browser_fetch_router/schema.py, and browser_fetch_router/schemas/v1.json
 
 ---
 
@@ -20,9 +20,9 @@
 
 **Purpose**: Shared contract scaffolding that blocks all user stories.
 
-- [ ] T003 [P] Add install-agent support matrix documentation shell in docs/browser-fetch-router-install-agent-contract.md
-- [ ] T004 [P] Add README pointer to install-agent contract and contributor verification flow in README.md
-- [ ] T005 Define stable result statuses, warning fields, skip reasons, and agent ordering in specs/002-install-agent-readiness/contracts/install-agent-cli.md
+- [x] T003 [P] Add install-agent support matrix documentation shell in docs/browser-fetch-router-install-agent-contract.md
+- [x] T004 [P] Add README pointer to install-agent contract and contributor verification flow in README.md
+- [x] T005 Define stable result statuses, warning fields, skip reasons, and agent ordering in specs/002-install-agent-readiness/contracts/install-agent-cli.md
 
 **Checkpoint**: Foundation ready; user story implementation can begin.
 
@@ -36,17 +36,17 @@
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [US1] Add failing Python test for default agent set, stable `--all` result order, and visible Kimi skipped/default-disabled entry in tests/browser_fetch_router/test_install_agent.py
-- [ ] T007 [P] [US1] Add failing Python test for `--all` aggregate `ok` with expected skips and aggregate `tool_setup_failed` for unexpected missing default roots in tests/browser_fetch_router/test_install_agent.py
-- [ ] T008 [P] [US1] Add failing CLI JSON/exit-code test for `install-agent --all --json` controlled HOME behavior in tests/browser_fetch_router/test_install_agent.py
+- [x] T006 [P] [US1] Add failing Python test for default agent set, stable `--all` result order, and visible Kimi skipped/default-disabled entry in tests/browser_fetch_router/test_install_agent.py
+- [x] T007 [P] [US1] Add failing Python test for `--all` aggregate `ok` with expected skips and aggregate `tool_setup_failed` for unexpected missing default roots in tests/browser_fetch_router/test_install_agent.py
+- [x] T008 [P] [US1] Add failing CLI JSON/exit-code test for `install-agent --all --json` controlled HOME behavior in tests/browser_fetch_router/test_install_agent.py
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Add table-driven `AgentInstallContract` policy with supported/default distinctions in browser_fetch_router/install_agent.py
-- [ ] T010 [US1] Update `install_agents` aggregation to emit `ok`, `skipped`, warnings, skip reasons, artifacts, and failure semantics in browser_fetch_router/install_agent.py
-- [ ] T011 [US1] Update install-agent CLI/schema metadata for default-vs-supported behavior in browser_fetch_router/schema.py and browser_fetch_router/schemas/v1.json
-- [ ] T012 [US1] Update existing tests that lock old `AGENTS`/all-writes-every-destination behavior in tests/browser_fetch_router/test_install_agent.py
-- [ ] T013 [US1] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US1 tests pass
+- [x] T009 [US1] Add table-driven `AgentInstallContract` policy with supported/default distinctions in browser_fetch_router/install_agent.py
+- [x] T010 [US1] Update `install_agents` aggregation to emit `ok`, `skipped`, warnings, skip reasons, artifacts, and failure semantics in browser_fetch_router/install_agent.py
+- [x] T011 [US1] Update install-agent CLI/schema metadata for default-vs-supported behavior in browser_fetch_router/schema.py and browser_fetch_router/schemas/v1.json
+- [x] T012 [US1] Update existing tests that lock old `AGENTS`/all-writes-every-destination behavior in tests/browser_fetch_router/test_install_agent.py
+- [x] T013 [US1] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US1 tests pass
 
 **Checkpoint**: User Story 1 complete and independently testable.
 
@@ -60,20 +60,20 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add failing Python test for Pi default destination `~/.pi/agent/skills/browser-fetch-router/SKILL.md` in tests/browser_fetch_router/test_install_agent.py
-- [ ] T015 [P] [US2] Add failing CLI test for explicit `install-agent pi --json` controlled HOME behavior in tests/browser_fetch_router/test_install_agent.py
-- [ ] T016 [P] [US2] Add failing Python test for explicit Kimi warning metadata in single-agent and `--select kimi` flows in tests/browser_fetch_router/test_install_agent.py
-- [ ] T017 [P] [US2] Add failing CLI test pinning explicit Kimi behavior when `.kimi/skills` is absent but the user explicitly opts in in tests/browser_fetch_router/test_install_agent.py
-- [ ] T018 [P] [US2] Add failing env override regression test for CODEX_HOME, GEMINI_HOME, OPENCODE_HOME, PI_HOME, and KIMI_HOME in tests/browser_fetch_router/test_install_agent.py
-- [ ] T019 [P] [US2] Add failing tests for `--force` overwrite behavior in explicit and selected install modes in tests/browser_fetch_router/test_install_agent.py
+- [x] T014 [P] [US2] Add failing Python test for Pi default destination `~/.pi/agent/skills/browser-fetch-router/SKILL.md` in tests/browser_fetch_router/test_install_agent.py
+- [x] T015 [P] [US2] Add failing CLI test for explicit `install-agent pi --json` controlled HOME behavior in tests/browser_fetch_router/test_install_agent.py
+- [x] T016 [P] [US2] Add failing Python test for explicit Kimi warning metadata in single-agent and `--select kimi` flows in tests/browser_fetch_router/test_install_agent.py
+- [x] T017 [P] [US2] Add failing CLI test pinning explicit Kimi behavior when `.kimi/skills` is absent but the user explicitly opts in in tests/browser_fetch_router/test_install_agent.py
+- [x] T018 [P] [US2] Add failing env override regression test for CODEX_HOME, GEMINI_HOME, OPENCODE_HOME, PI_HOME, and KIMI_HOME in tests/browser_fetch_router/test_install_agent.py
+- [x] T019 [P] [US2] Add failing tests for `--force` overwrite behavior in explicit and selected install modes in tests/browser_fetch_router/test_install_agent.py
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Change Pi built-in root to `~/.pi/agent` while preserving `PI_HOME` root-containing-skills semantics in browser_fetch_router/install_agent.py
-- [ ] T021 [US2] Implement Kimi explicit warning metadata and explicit-opt-in path creation rules in browser_fetch_router/install_agent.py
-- [ ] T022 [US2] Preserve env override behavior for Codex, Gemini, OpenCode, Pi, and Kimi through the contract table in browser_fetch_router/install_agent.py
-- [ ] T023 [US2] Preserve explicit `--force` overwrite behavior across single-agent and selected installs in browser_fetch_router/install_agent.py and browser_fetch_router/cli.py
-- [ ] T024 [US2] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US2 tests pass
+- [x] T020 [US2] Change Pi built-in root to `~/.pi/agent` while preserving `PI_HOME` root-containing-skills semantics in browser_fetch_router/install_agent.py
+- [x] T021 [US2] Implement Kimi explicit warning metadata and explicit-opt-in path creation rules in browser_fetch_router/install_agent.py
+- [x] T022 [US2] Preserve env override behavior for Codex, Gemini, OpenCode, Pi, and Kimi through the contract table in browser_fetch_router/install_agent.py
+- [x] T023 [US2] Preserve explicit `--force` overwrite behavior across single-agent and selected installs in browser_fetch_router/install_agent.py and browser_fetch_router/cli.py
+- [x] T024 [US2] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US2 tests pass
 
 **Checkpoint**: User Stories 1 and 2 complete and independently testable.
 
@@ -87,16 +87,16 @@
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Add CI-friendly tracked-path sweep test that avoids embedding contributor-local absolute paths in tests/browser_fetch_router/test_install_agent.py
-- [ ] T026 [P] [US3] Add failing test or static assertion that install-agent docs mention Pi migration and Kimi inheritance caveat in tests/browser_fetch_router/test_install_agent.py
-- [ ] T027 [P] [US3] Add failing docs/schema assertion for support matrix fields and `--adapter-path` filename rejection guidance in tests/browser_fetch_router/test_install_agent.py
+- [x] T025 [P] [US3] Add CI-friendly tracked-path sweep test that avoids embedding contributor-local absolute paths in tests/browser_fetch_router/test_install_agent.py
+- [x] T026 [P] [US3] Add failing test or static assertion that install-agent docs mention Pi migration and Kimi inheritance caveat in tests/browser_fetch_router/test_install_agent.py
+- [x] T027 [P] [US3] Add failing docs/schema assertion for support matrix fields and `--adapter-path` filename rejection guidance in tests/browser_fetch_router/test_install_agent.py
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] Complete support matrix, status semantics, adapter-path edge behavior, Pi migration note, and source evidence in docs/browser-fetch-router-install-agent-contract.md
-- [ ] T029 [US3] Update README install/test/contributor flow and install-agent docs pointer in README.md
-- [ ] T030 [US3] Update install-agent schema/help descriptions to mention supported/default distinction and selected agent semantics in browser_fetch_router/schema.py and browser_fetch_router/schemas/v1.json
-- [ ] T031 [US3] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US3 tests pass
+- [x] T028 [US3] Complete support matrix, status semantics, adapter-path edge behavior, Pi migration note, and source evidence in docs/browser-fetch-router-install-agent-contract.md
+- [x] T029 [US3] Update README install/test/contributor flow and install-agent docs pointer in README.md
+- [x] T030 [US3] Update install-agent schema/help descriptions to mention supported/default distinction and selected agent semantics in browser_fetch_router/schema.py and browser_fetch_router/schemas/v1.json
+- [x] T031 [US3] Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py` and confirm US3 tests pass
 
 **Checkpoint**: All user stories complete and independently testable.
 
@@ -106,15 +106,15 @@
 
 **Purpose**: Cleanup, final verification, live smoke, and review gates.
 
-- [ ] T032 Run AI slop cleanup on touched files: browser_fetch_router/install_agent.py, browser_fetch_router/cli.py, browser_fetch_router/schema.py, browser_fetch_router/schemas/v1.json, tests/browser_fetch_router/test_install_agent.py, README.md, docs/browser-fetch-router-install-agent-contract.md
-- [ ] T033 Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py`
-- [ ] T034 Run `python3 -m pytest tests/browser_fetch_router`
-- [ ] T035 Run `git diff --check`
-- [ ] T036 Run outside-repo `pip install .` and `browser-fetch-router --help` from a temp directory
-- [ ] T037 Run live smoke for `browser-fetch-router install-agent --help`, `--all --json`, explicit Pi, explicit Kimi, and env override selection from installed package
+- [x] T032 Run AI slop cleanup on touched files: browser_fetch_router/install_agent.py, browser_fetch_router/cli.py, browser_fetch_router/schema.py, browser_fetch_router/schemas/v1.json, tests/browser_fetch_router/test_install_agent.py, README.md, docs/browser-fetch-router-install-agent-contract.md
+- [x] T033 Run `python3 -m pytest tests/browser_fetch_router/test_install_agent.py`
+- [x] T034 Run `python3 -m pytest tests/browser_fetch_router`
+- [x] T035 Run `git diff --check`
+- [x] T036 Run outside-repo `pip install .` and `browser-fetch-router --help` from a temp directory
+- [x] T037 Run live smoke for `browser-fetch-router install-agent --help`, `--all --json`, explicit Pi, explicit Kimi, and env override selection from installed package
 - [ ] T038 Run documented contributor install/test flow and verify `git status --short` stays empty
-- [ ] T039 Run tracked-file hardcoded-path sweep and record zero matches without committing contributor-local absolute paths
-- [ ] T040 Update PR evidence notes in specs/002-install-agent-readiness/root-cause.md with exact commands, exit codes, stdout/stderr summaries, temp dirs abstracted, and artifacts created
+- [x] T039 Run tracked-file hardcoded-path sweep and record zero matches without committing contributor-local absolute paths
+- [x] T040 Update PR evidence notes in specs/002-install-agent-readiness/root-cause.md with exact commands, exit codes, stdout/stderr summaries, temp dirs abstracted, and artifacts created
 - [ ] T041 Get post-implementation reviews from Claude, Gemini, Grok, GLM, and DeepSeek; resolve all valid findings before PR readiness
 
 ---

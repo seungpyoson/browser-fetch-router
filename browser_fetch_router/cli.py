@@ -334,13 +334,35 @@ def build_parser() -> argparse.ArgumentParser:
     acceptance.add_argument("--include-network", action="store_true")
     acceptance.add_argument("--include-paid", action="store_true")
 
-    install = sub.add_parser("install-agent")
-    install.add_argument("agent", nargs="?", choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"])
+    install = sub.add_parser(
+        "install-agent",
+        description="Install thin browser-fetch-router agent adapter skills.",
+    )
+    install.add_argument(
+        "agent",
+        nargs="?",
+        choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"],
+        help="Explicit supported agent to install.",
+    )
     install_mode = install.add_mutually_exclusive_group()
-    install_mode.add_argument("--all", action="store_true")
-    install_mode.add_argument("--select")
-    install.add_argument("--force", action="store_true")
-    install.add_argument("--adapter-path")
+    install_mode.add_argument(
+        "--all",
+        action="store_true",
+        help="Install default agents and report explicit-only agents as skipped.",
+    )
+    install_mode.add_argument(
+        "--select",
+        help="Comma-separated subset of supported agents to install.",
+    )
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing adapter.",
+    )
+    install.add_argument(
+        "--adapter-path",
+        help="Explicit destination file path; basename must be SKILL.md.",
+    )
     install.add_argument("--json", action="store_true")
 
     return parser
@@ -445,10 +467,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "install-agent",
                         f"unknown agent(s) in --select: {', '.join(invalid)}",
                     )
-            return _emit(
-                "install-agent",
-                handler=lambda: install_agents(selected_agents, force=args.force),
-            )
+            if args.all:
+                def install_handler():
+                    return install_agents(
+                        selected_agents,
+                        force=args.force,
+                        default_mode=True,
+                    )
+            else:
+                def install_handler():
+                    return install_agents(
+                        selected_agents,
+                        force=args.force,
+                    )
+            return _emit("install-agent", handler=install_handler)
         if not args.agent:
             return _usage_error(
                 "install-agent",

@@ -74,6 +74,33 @@ Expected behavior:
 
 Kimi explicit installs must include warning metadata in JSON. The warning must be visible in both single-agent and `--select kimi` flows and must not be emitted for `--all` default-disabled skip unless the skip reason already covers inheritance.
 
+Warning shape:
+
+```json
+{
+  "warnings": [
+    {
+      "code": "kimi_brand_root_inheritance",
+      "message": "Writing Kimi's brand skill root can change Claude/Codex skill inheritance behavior."
+    }
+  ]
+}
+```
+
+Default-disabled skip shape:
+
+```json
+{
+  "status": "skipped",
+  "skip_reason": {
+    "code": "default_disabled",
+    "message": "Kimi is supported only by explicit opt-in because its brand skill root can change Claude/Codex inheritance behavior."
+  }
+}
+```
+
+Per-agent result order is stable: `claude`, `codex`, `gemini`, `kimi`, `opencode`, `pi`.
+
 ## Existing Error Compatibility
 
 - Invalid `--adapter-path` stays `tool_setup_failed` with `invalid_adapter_path`.

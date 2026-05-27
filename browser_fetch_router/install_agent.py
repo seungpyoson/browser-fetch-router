@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,65 @@ SAFE_ENV_KEYS = {
     "BFR_CDP_URL",
 }
 
-AGENTS = ["claude", "codex", "gemini", "kimi", "opencode", "pi"]
+KIMI_INHERITANCE_WARNING = {
+    "code": "kimi_brand_root_inheritance",
+    "message": (
+        "Writing Kimi's brand skill root can change Claude/Codex skill "
+        "inheritance behavior."
+    ),
+}
+
+KIMI_DEFAULT_SKIP_REASON = {
+    "code": "default_disabled",
+    "message": (
+        "Kimi is supported only by explicit opt-in because its brand skill "
+        "root can change Claude/Codex inheritance behavior."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class AgentInstallContract:
+    name: str
+    root_parts: tuple[str, ...]
+    env_var: str | None = None
+    default_enabled: bool = True
+    default_skip_reason: dict[str, str] | None = None
+    explicit_warning: dict[str, str] | None = None
+    create_root_on_explicit: bool = False
+
+    def root(self) -> Path:
+        if self.env_var and (override := os.environ.get(self.env_var)):
+            return Path(override).expanduser()
+        return home().joinpath(*self.root_parts)
+
+    def destination(self) -> Path:
+        return self.root() / "skills" / "browser-fetch-router" / "SKILL.md"
+
+
+_AGENT_CONTRACTS = (
+    AgentInstallContract("claude", (".claude",)),
+    AgentInstallContract("codex", (".codex",), env_var="CODEX_HOME"),
+    AgentInstallContract("gemini", (".gemini",), env_var="GEMINI_HOME"),
+    AgentInstallContract(
+        "kimi",
+        (".kimi",),
+        env_var="KIMI_HOME",
+        default_enabled=False,
+        default_skip_reason=KIMI_DEFAULT_SKIP_REASON,
+        explicit_warning=KIMI_INHERITANCE_WARNING,
+        create_root_on_explicit=True,
+    ),
+    AgentInstallContract(
+        "opencode",
+        (".config", "opencode"),
+        env_var="OPENCODE_HOME",
+    ),
+    AgentInstallContract("pi", (".pi", "agent"), env_var="PI_HOME"),
+)
+
+INSTALL_CONTRACTS = {contract.name: contract for contract in _AGENT_CONTRACTS}
+AGENTS = [contract.name for contract in _AGENT_CONTRACTS]
 
 
 def _safe_env() -> dict[str, str]:
@@ -55,26 +114,27 @@ def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
             return validate_skill_md_dest(path)
         except UnsafeDestination as exc:
             raise ValueError(str(exc)) from exc
-    h = home()
-    mapping = {
-        "claude": h / ".claude" / "skills" / "browser-fetch-router" / "SKILL.md",
-        "codex": Path(os.environ.get("CODEX_HOME", str(h / ".codex"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "gemini": Path(os.environ.get("GEMINI_HOME", str(h / ".gemini"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "kimi": Path(os.environ.get("KIMI_HOME", str(h / ".kimi"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "opencode": Path(os.environ.get("OPENCODE_HOME", str(h / ".config" / "opencode"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "pi": Path(os.environ.get("PI_HOME", str(h / ".config" / "pi"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-    }
-    return mapping[agent]
+    return INSTALL_CONTRACTS[agent].destination()
 
 
 def install_agents(
     agents: list[str],
     *,
     force: bool = False,
+    default_mode: bool = False,
 ) -> dict[str, Any]:
     results = []
     all_ok = True
     for agent in agents:
+        contract = INSTALL_CONTRACTS[agent]
+        if default_mode and not contract.default_enabled:
+            results.append({
+                "agent": agent,
+                "status": "skipped",
+                "artifacts": [],
+                "skip_reason": contract.default_skip_reason,
+            })
+            continue
         result = install_agent(agent, force=force)
         entry = {
             "agent": agent,
@@ -85,7 +145,9 @@ def install_agents(
             entry["error"] = result["error"]
         if result.get("evidence"):
             entry["evidence"] = result["evidence"]
-        if result.get("status") != "ok":
+        if result.get("warnings"):
+            entry["warnings"] = result["warnings"]
+        if result.get("status") not in {"ok", "skipped"}:
             all_ok = False
         results.append(entry)
     return envelope(
@@ -146,6 +208,7 @@ Adapter agent: {agent}
 
 
 def install_agent(agent: str, *, force: bool = False, adapter_path: str | None = None) -> dict[str, Any]:
+    contract = INSTALL_CONTRACTS[agent]
     try:
         dest = destination_for(agent, adapter_path=adapter_path)
     except ValueError as exc:
@@ -154,6 +217,11 @@ def install_agent(agent: str, *, force: bool = False, adapter_path: str | None =
             status="tool_setup_failed",
             error={"code": "invalid_adapter_path", "message": str(exc)},
         )
+    warnings = []
+    if not adapter_path and contract.explicit_warning:
+        warnings.append(contract.explicit_warning)
+    if not adapter_path and contract.create_root_on_explicit:
+        dest.parent.parent.mkdir(parents=True, exist_ok=True)
     if not adapter_path and not dest.parent.parent.exists():
         return envelope(
             command="install-agent",
@@ -191,12 +259,13 @@ def install_agent(agent: str, *, force: bool = False, adapter_path: str | None =
             },
             artifacts=[{"path": str(dest)}, {"verification": verification}],
         )
-    return envelope(
-        command="install-agent",
-        status="ok",
-        artifacts=[{"path": str(dest)}],
-        evidence={"verification": verification},
-    )
+    fields: dict[str, Any] = {
+        "artifacts": [{"path": str(dest)}],
+        "evidence": {"verification": verification},
+    }
+    if warnings:
+        fields["warnings"] = warnings
+    return envelope(command="install-agent", status="ok", **fields)
 
 
 def _run_verification() -> dict[str, Any]:
