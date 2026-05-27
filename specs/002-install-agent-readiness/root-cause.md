@@ -291,3 +291,4 @@ Generated artifact hygiene:
 - `git status --short --ignored` showed only intended implementation files as
   uncommitted changes plus ignored generated directories such as `.pytest_cache`,
   bytecode caches, virtualenvs, `browser_fetch_router.egg-info`, and `build/`.
+- After commit `2f76e39`, `git status --short` exited 0 with empty output.

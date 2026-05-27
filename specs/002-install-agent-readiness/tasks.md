@@ -112,7 +112,7 @@
 - [x] T035 Run `git diff --check`
 - [x] T036 Run outside-repo `pip install .` and `browser-fetch-router --help` from a temp directory
 - [x] T037 Run live smoke for `browser-fetch-router install-agent --help`, `--all --json`, explicit Pi, explicit Kimi, and env override selection from installed package
-- [ ] T038 Run documented contributor install/test flow and verify `git status --short` stays empty
+- [x] T038 Run documented contributor install/test flow and verify `git status --short` stays empty
 - [x] T039 Run tracked-file hardcoded-path sweep and record zero matches without committing contributor-local absolute paths
 - [x] T040 Update PR evidence notes in specs/002-install-agent-readiness/root-cause.md with exact commands, exit codes, stdout/stderr summaries, temp dirs abstracted, and artifacts created
 - [ ] T041 Get post-implementation reviews from Claude, Gemini, Grok, GLM, and DeepSeek; resolve all valid findings before PR readiness
