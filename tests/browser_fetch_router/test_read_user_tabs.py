@@ -50,6 +50,25 @@ def test_list_tabs_maps_unexpected_redirect_to_cdp_specific_code(monkeypatch, tm
     assert result["error"]["message"] == "CDP tab list endpoint returned an unexpected redirect."
 
 
+def test_list_tabs_sanitizes_unknown_cdp_list_failure(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(rut, "cdp_base_url", lambda **_kw: "http://127.0.0.1:9222")
+
+    def fail(_base):
+        raise RuntimeError("cdp list failed; cookie=secret")
+
+    monkeypatch.setattr(rut, "fetch_tab_list", fail)
+
+    result = rut.list_tabs(session_id="sid-read-user-tabs")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_unreachable"
+    assert result["error"]["message"] == "CDP tab list endpoint was unreachable."
+    assert "cookie=secret" not in result["error"]["message"]
+
+
 def test_read_tab_maps_unexpected_redirect_to_cdp_specific_code(monkeypatch, tmp_path):
     from browser_fetch_router import cdp
     from browser_fetch_router import read_user_tabs as rut
@@ -374,8 +393,8 @@ def test_screenshot_tab_rejects_missing_initial_tab_id_before_capture(monkeypatc
     )
 
     assert result["status"] == "tool_setup_failed"
-    assert result["error"]["code"] == "cdp_screenshot_failed"
-    assert result["error"]["message"] == "CDP protocol command failed."
+    assert result["error"]["code"] == "cdp_tab_missing_id"
+    assert result["error"]["message"] == "Resolved tab did not expose a CDP tab id."
     assert called["capture"] is False
     assert not output.exists()
 

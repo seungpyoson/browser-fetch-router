@@ -53,6 +53,10 @@ class CdpTabListMalformedJson(CdpProtocolError):
     """The CDP /json endpoint returned a body that was not valid JSON."""
 
 
+class CdpTabMissingId(CdpProtocolError):
+    """The resolved CDP tab did not expose a non-empty tab id."""
+
+
 class CdpAuthorizationError(RuntimeError):
     """The current tab URL was not authorized at extraction time."""
 

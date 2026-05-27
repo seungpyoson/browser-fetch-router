@@ -18,6 +18,7 @@ from browser_fetch_router.cdp import (
     CdpProtocolError,
     CdpResponseTooLarge,
     CdpTabListMalformedJson,
+    CdpTabMissingId,
     CdpUnexpectedRedirect,
     CdpWebSocketDependencyMissing,
     CdpWebSocketUnavailable,
@@ -110,18 +111,11 @@ def _tab_list_failure_envelope(
     *,
     cdp_base: str | None = None,
 ) -> dict[str, Any]:
-    if isinstance(exc, CdpUnexpectedRedirect):
-        code = "cdp_unexpected_redirect"
-        message = "CDP tab list endpoint returned an unexpected redirect."
-    elif isinstance(exc, CdpTabListMalformedJson):
-        code = "cdp_tab_list_malformed_json"
-        message = "CDP tab list endpoint returned malformed JSON."
-    elif isinstance(exc, CdpResponseTooLarge):
-        code = "cdp_response_too_large"
-        message = "CDP tab list response exceeded the configured size limit."
-    else:
-        code = "cdp_unreachable"
-        message = str(exc)[:200]
+    classified = _classified_cdp_error(exc)
+    code, message = classified or (
+        "cdp_unreachable",
+        "CDP tab list endpoint was unreachable.",
+    )
     evidence = {"cdp_base": cdp_base} if cdp_base is not None else None
     return envelope(
         command="read-user-tabs",
@@ -131,6 +125,18 @@ def _tab_list_failure_envelope(
     )
 
 
+def _classified_cdp_error(exc: BaseException) -> tuple[str, str] | None:
+    if isinstance(exc, CdpUnexpectedRedirect):
+        return "cdp_unexpected_redirect", "CDP tab list endpoint returned an unexpected redirect."
+    if isinstance(exc, CdpTabListMalformedJson):
+        return "cdp_tab_list_malformed_json", "CDP tab list endpoint returned malformed JSON."
+    if isinstance(exc, CdpResponseTooLarge):
+        return "cdp_response_too_large", "CDP tab list response exceeded the configured size limit."
+    if isinstance(exc, CdpTabMissingId):
+        return "cdp_tab_missing_id", "Resolved tab did not expose a CDP tab id."
+    return None
+
+
 def _cdp_failure_envelope(
     exc: BaseException,
     *,
@@ -138,15 +144,9 @@ def _cdp_failure_envelope(
     operation: str,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if isinstance(exc, CdpUnexpectedRedirect):
-        code = "cdp_unexpected_redirect"
-        message = "CDP tab list endpoint returned an unexpected redirect."
-    elif isinstance(exc, CdpTabListMalformedJson):
-        code = "cdp_tab_list_malformed_json"
-        message = "CDP tab list endpoint returned malformed JSON."
-    elif isinstance(exc, CdpResponseTooLarge):
-        code = "cdp_response_too_large"
-        message = "CDP tab list response exceeded the configured size limit."
+    classified = _classified_cdp_error(exc)
+    if classified is not None:
+        code, message = classified
     elif isinstance(exc, CdpWebSocketUrlInvalid):
         code = "cdp_websocket_url_invalid"
         message = "Tab did not expose a valid CDP WebSocket URL."
@@ -521,7 +521,7 @@ def screenshot_tab(
     tab_id = tab.get("id")
     if not isinstance(tab_id, str) or not tab_id:
         return _cdp_failure_envelope(
-            CdpProtocolError("target tab did not expose a CDP tab id"),
+            CdpTabMissingId("target tab did not expose a CDP tab id"),
             url=url,
             operation="screenshot",
             evidence={"tab_id": tab_id},

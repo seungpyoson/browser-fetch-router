@@ -585,3 +585,27 @@ def test_fetch_tab_screenshot_preserves_safety_error_from_relist(monkeypatch):
 
     with pytest.raises(SafetyError):
         cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1")
+
+
+@pytest.mark.parametrize(
+    "exc_factory",
+    [
+        lambda cdp_module: cdp_module.CdpUnexpectedRedirect("unexpected_redirect:302"),
+        lambda cdp_module: cdp_module.CdpResponseTooLarge("cdp_response_exceeded_1048576_bytes"),
+        lambda cdp_module: cdp_module.CdpTabListMalformedJson("cdp_tab_list_malformed_json"),
+    ],
+)
+def test_fetch_tab_screenshot_preserves_classified_relist_errors(monkeypatch, exc_factory):
+    from browser_fetch_router import cdp as cdp_module
+
+    exc = exc_factory(cdp_module)
+
+    def fail_list(*_args, **_kwargs):
+        raise exc
+
+    monkeypatch.setattr(cdp_module, "fetch_tab_list", fail_list)
+
+    with pytest.raises(type(exc)) as raised:
+        cdp_module.fetch_tab_screenshot("http://127.0.0.1:9222", "T1")
+
+    assert raised.value is exc
