@@ -49,6 +49,10 @@ class CdpProtocolError(RuntimeError):
     """The DevTools protocol response was missing, malformed, or failed."""
 
 
+class CdpTabListMalformedJson(CdpProtocolError):
+    """The CDP /json endpoint returned a body that was not valid JSON."""
+
+
 class CdpAuthorizationError(RuntimeError):
     """The current tab URL was not authorized at extraction time."""
 
@@ -259,7 +263,9 @@ def _send_cdp_command(
         if "exceptionDetails" in result:
             raise CdpProtocolError(f"{method} failed due to JS exception")
         return result
-    raise CdpProtocolError(f"{method} response not received")
+    raise CdpProtocolError(
+        f"{method} response not received after {_CDP_MAX_DRAIN_MESSAGES} messages"
+    )
 
 
 def _main_frame_from_tree(frame_tree: dict[str, Any]) -> tuple[str, str]:
@@ -370,7 +376,10 @@ def fetch_tab_list(base_url: str, *, timeout: float = 3.0) -> list[dict[str, Any
         if str(exc).startswith("unexpected_redirect"):
             raise CdpUnexpectedRedirect(str(exc)) from exc
         raise
-    raw = json.loads(response.text)
+    try:
+        raw = json.loads(response.text)
+    except json.JSONDecodeError as exc:
+        raise CdpTabListMalformedJson("cdp_tab_list_malformed_json") from exc
     if not isinstance(raw, list):
         return []
     out: list[dict[str, Any]] = []
@@ -400,7 +409,8 @@ def fetch_tab_text(
 
     The optional `base_url` lets callers enforce that the tab-level
     WebSocket URL came from the same already-validated CDP endpoint used
-    to list tabs.
+    to list tabs. Passing None is only for callers that already validated
+    `ws_url` at their own boundary.
     """
     if base_url is not None:
         ws_url = validate_tab_websocket_url(ws_url, base_url)
@@ -455,6 +465,8 @@ def fetch_tab_screenshot(
     try:
         tabs = fetch_tab_list(base_url, timeout=timeout)
     except SafetyError:
+        raise
+    except (CdpUnexpectedRedirect, CdpResponseTooLarge, CdpProtocolError):
         raise
     except Exception as exc:
         raise CdpWebSocketUnavailable("cdp_tab_list_failed") from exc

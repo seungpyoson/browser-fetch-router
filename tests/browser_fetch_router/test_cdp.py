@@ -210,6 +210,36 @@ def test_fetch_tab_list_succeeds_under_cap():
         server.shutdown()
 
 
+def test_fetch_tab_list_rejects_malformed_json_with_specific_error():
+    """Malformed CDP /json bodies should not be bucketed as unreachable."""
+    from http.server import BaseHTTPRequestHandler
+
+    import pytest
+
+    from browser_fetch_router import cdp as cdp_module
+
+    payload = b"{not-json"
+
+    class _MalformedJson(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_a):
+            pass
+
+    server = _start_loopback_cdp(_MalformedJson)
+    try:
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        with pytest.raises(cdp_module.CdpTabListMalformedJson):
+            cdp_module.fetch_tab_list(base)
+    finally:
+        server.shutdown()
+
+
 def test_validate_tab_websocket_url_accepts_matching_loopback_target():
     from browser_fetch_router import cdp as cdp_module
 
@@ -264,6 +294,20 @@ def test_cdp_drain_limit_is_named_for_reviewable_tuning():
     from browser_fetch_router import cdp as cdp_module
 
     assert cdp_module._CDP_MAX_DRAIN_MESSAGES == 100
+
+
+def test_send_cdp_command_reports_drain_limit_when_response_not_received():
+    from browser_fetch_router import cdp as cdp_module
+
+    socket = _FakeWebSocket(
+        [{"id": 999, "result": {}}] * cdp_module._CDP_MAX_DRAIN_MESSAGES
+    )
+
+    with pytest.raises(
+        cdp_module.CdpProtocolError,
+        match=r"Runtime\.evaluate response not received after 100 messages",
+    ):
+        cdp_module._send_cdp_command(socket, 4, "Runtime.evaluate")
 
 
 def test_send_cdp_command_maps_runtime_exception_details_to_protocol_error():

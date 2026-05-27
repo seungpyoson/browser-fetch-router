@@ -16,6 +16,9 @@ from browser_fetch_router.cdp import cdp_base_url, fetch_tab_list
 from browser_fetch_router.cdp import (
     CdpAuthorizationError,
     CdpProtocolError,
+    CdpResponseTooLarge,
+    CdpTabListMalformedJson,
+    CdpUnexpectedRedirect,
     CdpWebSocketDependencyMissing,
     CdpWebSocketUnavailable,
     CdpWebSocketUrlInvalid,
@@ -102,6 +105,32 @@ def _current_url_denial_envelope(
     )
 
 
+def _tab_list_failure_envelope(
+    exc: BaseException,
+    *,
+    cdp_base: str | None = None,
+) -> dict[str, Any]:
+    if isinstance(exc, CdpUnexpectedRedirect):
+        code = "cdp_unexpected_redirect"
+        message = "CDP tab list endpoint returned an unexpected redirect."
+    elif isinstance(exc, CdpTabListMalformedJson):
+        code = "cdp_tab_list_malformed_json"
+        message = "CDP tab list endpoint returned malformed JSON."
+    elif isinstance(exc, CdpResponseTooLarge):
+        code = "cdp_response_too_large"
+        message = "CDP tab list response exceeded the configured size limit."
+    else:
+        code = "cdp_unreachable"
+        message = str(exc)[:200]
+    evidence = {"cdp_base": cdp_base} if cdp_base is not None else None
+    return envelope(
+        command="read-user-tabs",
+        status="tool_setup_failed",
+        error={"code": code, "message": message},
+        evidence=evidence,
+    )
+
+
 def _cdp_failure_envelope(
     exc: BaseException,
     *,
@@ -109,7 +138,16 @@ def _cdp_failure_envelope(
     operation: str,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if isinstance(exc, CdpWebSocketUrlInvalid):
+    if isinstance(exc, CdpUnexpectedRedirect):
+        code = "cdp_unexpected_redirect"
+        message = "CDP tab list endpoint returned an unexpected redirect."
+    elif isinstance(exc, CdpTabListMalformedJson):
+        code = "cdp_tab_list_malformed_json"
+        message = "CDP tab list endpoint returned malformed JSON."
+    elif isinstance(exc, CdpResponseTooLarge):
+        code = "cdp_response_too_large"
+        message = "CDP tab list response exceeded the configured size limit."
+    elif isinstance(exc, CdpWebSocketUrlInvalid):
         code = "cdp_websocket_url_invalid"
         message = "Tab did not expose a valid CDP WebSocket URL."
     elif isinstance(exc, CdpWebSocketUrlMismatch):
@@ -275,12 +313,7 @@ def list_tabs(
         # failure (exit 3).
         raise
     except Exception as exc:
-        return envelope(
-            command="read-user-tabs",
-            status="tool_setup_failed",
-            error={"code": "cdp_unreachable", "message": str(exc)[:200]},
-            evidence={"cdp_base": base},
-        )
+        return _tab_list_failure_envelope(exc, cdp_base=base)
     if not all_tabs:
         # Default: only the most recent (active) page-type tab.
         page_tabs = [t for t in tabs if t.get("type") == "page"]
@@ -324,11 +357,7 @@ def _resolve_and_authorize_tab(
         # SSRF / DNS rebinding from CDP layer must propagate.
         raise
     except Exception as exc:
-        return None, None, None, None, envelope(
-            command="read-user-tabs",
-            status="tool_setup_failed",
-            error={"code": "cdp_unreachable", "message": str(exc)[:200]},
-        )
+        return None, None, None, None, _tab_list_failure_envelope(exc, cdp_base=base)
     tab = _resolve_tab(target, tabs)
     if tab is None:
         return None, None, None, None, envelope(
@@ -385,6 +414,8 @@ def read_tab(
         return error
     # CDP text extraction is wired in cdp.fetch_tab_text; if unavailable we
     # report tool_setup_failed rather than reading the page-level world.
+    # `fetch_tab_text(base_url=None)` is intentional here: this boundary
+    # validates the tab WebSocket URL before invoking the CDP helper.
     ws_url = tab.get("webSocketDebuggerUrl") or ""
     try:
         ws_url = validate_tab_websocket_url(ws_url, base)
@@ -487,28 +518,40 @@ def screenshot_tab(
     )
     if error is not None:
         return error
+    tab_id = tab.get("id")
+    if not isinstance(tab_id, str) or not tab_id:
+        return _cdp_failure_envelope(
+            CdpProtocolError("target tab did not expose a CDP tab id"),
+            url=url,
+            operation="screenshot",
+            evidence={"tab_id": tab_id},
+        )
     ws_url = tab.get("webSocketDebuggerUrl") or ""
     try:
+        # This first-list check fails fast for missing or mismatched tab
+        # metadata. `fetch_tab_screenshot` deliberately re-lists and
+        # re-validates before capture so a tab-list race cannot reuse stale
+        # WebSocket metadata.
         validate_tab_websocket_url(ws_url, base)
     except (CdpWebSocketUrlInvalid, CdpWebSocketUrlMismatch) as exc:
         return _cdp_failure_envelope(
             exc,
             url=url,
             operation="screenshot",
-            evidence={"tab_id": tab.get("id")},
+            evidence={"tab_id": tab_id},
         )
     try:
         from browser_fetch_router.cdp import fetch_tab_screenshot
         png_bytes = fetch_tab_screenshot(
             base,
-            tab.get("id") or target,
+            tab_id,
             authorize_url=_current_url_authorizer(auth),
         )
     except CdpAuthorizationError:
         return _current_url_denial_envelope(
             url=url,
             approval_scope=approval_scope,
-            tab_id=tab.get("id"),
+            tab_id=tab_id,
         )
     except SafetyError:
         raise
@@ -517,14 +560,14 @@ def screenshot_tab(
             exc,
             url=url,
             operation="screenshot",
-            evidence={"tab_id": tab.get("id")},
+            evidence={"tab_id": tab_id},
         )
     except Exception as exc:
         return _cdp_failure_envelope(
             exc,
             url=url,
             operation="screenshot",
-            evidence={"tab_id": tab.get("id")},
+            evidence={"tab_id": tab_id},
         )
     # Route through atomic_write_bytes (mode=0o600 set on the temp file
     # before os.replace) so the visible target file appears at 0o600
