@@ -97,9 +97,15 @@ def run_task(
                 message=str(exc)[:200],
                 evidence=_evidence(session_id, latest),
             )
-        latest = _decode_json(response)
+        poll_data = _decode_json(response)
         if response.status_code not in {200, 201}:
-            return _http_error(response.status_code, latest)
+            stopped = _stop_session(client, api_key, session_id)
+            if stopped:
+                latest = stopped
+            result = _http_error(response.status_code, poll_data)
+            result["evidence"] = _evidence(session_id, latest)
+            return result
+        latest = poll_data
 
     remote_status = str(latest.get("status") or "")
     evidence = _evidence(session_id, latest)

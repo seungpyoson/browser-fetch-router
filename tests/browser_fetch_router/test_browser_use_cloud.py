@@ -201,6 +201,45 @@ def test_browser_use_cloud_stops_running_session_when_poll_fails():
     assert client.calls[2]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-poll-fail/stop"
 
 
+def test_browser_use_cloud_stops_running_session_when_poll_returns_http_error():
+    from browser_fetch_router.providers import browser_use_cloud
+
+    client = FakeHttpClient([
+        FakeResponse(200, {"id": "sess-poll-http-error", "status": "running", "stepCount": 1}),
+        FakeResponse(500, {"detail": "temporary provider failure"}),
+        FakeResponse(
+            200,
+            {
+                "id": "sess-poll-http-error",
+                "status": "stopped",
+                "stepCount": 1,
+                "totalCostUsd": "0.04",
+            },
+        ),
+    ])
+
+    result = browser_use_cloud.run_task(
+        "open page https://example.com",
+        api_key="bu_test",
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+        http_client=client,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_http_error"
+    assert result["error"]["http_status"] == 500
+    assert result["evidence"]["remote_status"] == "stopped"
+    assert result["evidence"]["total_cost_usd"] == "0.04"
+    assert [call["method"] for call in client.calls] == ["POST", "GET", "POST"]
+    assert (
+        client.calls[2]["url"]
+        == "https://api.browser-use.com/api/v3/sessions/sess-poll-http-error/stop"
+    )
+
+
 def test_browser_use_cloud_stops_running_session_when_deadline_is_reached(monkeypatch):
     from browser_fetch_router.providers import browser_use_cloud
 
