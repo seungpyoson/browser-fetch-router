@@ -80,6 +80,16 @@ def test_setup_cdp_launch_rejects_unsafe_start_url_before_chrome(monkeypatch):
     assert result["evidence"]["setup"]["cdp_base"] == "http://127.0.0.1:9222"
 
 
+def test_find_chrome_executable_honors_chrome_bin(monkeypatch):
+    from browser_fetch_router import read_user_tabs as rut
+
+    monkeypatch.delenv("BFR_CHROME_PATH", raising=False)
+    monkeypatch.delenv("CHROME_PATH", raising=False)
+    monkeypatch.setenv("CHROME_BIN", "/custom/chrome")
+
+    assert rut._find_chrome_executable() == "/custom/chrome"
+
+
 def test_setup_cdp_launch_reports_failure_when_cdp_never_becomes_ready(monkeypatch, tmp_path):
     from browser_fetch_router import read_user_tabs as rut
 

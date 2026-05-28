@@ -10,6 +10,11 @@ class _Usage:
         return {"input_tokens": 10, "output_tokens": 5}
 
 
+class _OpaqueUsage:
+    def __repr__(self):
+        return "<OpaqueUsage tokens=unknown>"
+
+
 class _Result:
     def __init__(self, *, success=True, message="Page title: Example Domain"):
         self.message = message
@@ -109,6 +114,75 @@ def test_browserbase_stagehand_success_runs_and_ends_session(monkeypatch):
         ("end", {}),
         ("client_exit", {}),
     ]
+
+
+def test_browserbase_stagehand_whitespace_output_is_empty(monkeypatch):
+    from browser_fetch_router.providers import browserbase_stagehand
+
+    class WhitespaceSession(_FakeSession):
+        async def execute(self, **kwargs):
+            self._events.append(("execute", kwargs))
+            return _Response(_Result(message=" \n\t "))
+
+    class TrackingStagehand(_FakeStagehand):
+        async def start(self, **kwargs):
+            self.events.append(("start", kwargs))
+            return WhitespaceSession(self.events, _Result())
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        types.SimpleNamespace(AsyncStagehand=TrackingStagehand),
+    )
+
+    result = browserbase_stagehand.run_task(
+        "Open https://example.com and report the page title",
+        api_key="bb_secret",
+        project_id=None,
+        model_name="google/gemini-2.5-flash",
+        max_steps=3,
+        max_duration_sec=30,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browserbase_empty_output"
+
+
+def test_browserbase_stagehand_usage_evidence_is_json_safe(monkeypatch):
+    from browser_fetch_router.providers import browserbase_stagehand
+
+    class OpaqueUsageResult(_Result):
+        def __init__(self):
+            super().__init__()
+            self.usage = _OpaqueUsage()
+
+    class OpaqueUsageSession(_FakeSession):
+        async def execute(self, **kwargs):
+            self._events.append(("execute", kwargs))
+            return _Response(OpaqueUsageResult())
+
+    class TrackingStagehand(_FakeStagehand):
+        async def start(self, **kwargs):
+            self.events.append(("start", kwargs))
+            return OpaqueUsageSession(self.events, _Result())
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        types.SimpleNamespace(AsyncStagehand=TrackingStagehand),
+    )
+
+    result = browserbase_stagehand.run_task(
+        "Open https://example.com and report the page title",
+        api_key="bb_secret",
+        project_id=None,
+        model_name="google/gemini-2.5-flash",
+        max_steps=3,
+        max_duration_sec=30,
+    )
+
+    assert result["status"] == "ok"
+    assert result["evidence"]["usage"] == "<OpaqueUsage tokens=unknown>"
 
 
 def test_browserbase_stagehand_failed_task_still_ends_session(monkeypatch):

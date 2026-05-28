@@ -706,7 +706,11 @@ def setup_cdp(
 
 
 def _find_chrome_executable() -> str | None:
-    env_path = os.environ.get("BFR_CHROME_PATH") or os.environ.get("CHROME_PATH")
+    env_path = (
+        os.environ.get("BFR_CHROME_PATH")
+        or os.environ.get("CHROME_PATH")
+        or os.environ.get("CHROME_BIN")
+    )
     if env_path:
         return env_path
     for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):

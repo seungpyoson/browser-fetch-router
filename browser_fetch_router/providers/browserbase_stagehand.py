@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 
@@ -68,6 +69,7 @@ async def _run_task_async(
                 )
                 result = response.data.result
                 message = getattr(result, "message", "") or ""
+                stripped_message = message.strip()
                 success = bool(getattr(result, "success", False))
                 evidence = {
                     "provider": "browserbase",
@@ -79,7 +81,8 @@ async def _run_task_async(
                 }
                 usage = getattr(result, "usage", None)
                 if usage is not None:
-                    evidence["usage"] = usage.to_dict() if hasattr(usage, "to_dict") else usage
+                    usage_value = usage.to_dict() if hasattr(usage, "to_dict") else usage
+                    evidence["usage"] = _json_safe(usage_value)
                 if not success:
                     return _error(
                         "provider_unavailable",
@@ -87,7 +90,7 @@ async def _run_task_async(
                         message=message[:200] if message else None,
                         evidence=evidence,
                     )
-                if not message:
+                if not stripped_message:
                     return _error(
                         "provider_unavailable",
                         "browserbase_empty_output",
@@ -96,7 +99,7 @@ async def _run_task_async(
                 return {
                     "status": "ok",
                     "provider": "browserbase",
-                    "content_markdown": message.strip(),
+                    "content_markdown": stripped_message,
                     "evidence": evidence,
                 }
             finally:
@@ -140,6 +143,14 @@ def _code_for_exception(exc: BaseException) -> str:
     if status_code == 422:
         return "browserbase_usage_error"
     return "browserbase_request_failed"
+
+
+def _json_safe(value: Any) -> Any:
+    try:
+        json.dumps(value)
+    except TypeError:
+        return repr(value)
+    return value
 
 
 def _error(
