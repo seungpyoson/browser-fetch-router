@@ -230,6 +230,26 @@ def test_doctor_global_install_verification_detects_stale_schema_defaults(tmp_pa
     }]
 
 
+def test_doctor_global_install_verification_reports_missing_shim_as_command_mismatch(tmp_path):
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    env = subprocess_env()
+    env["HOME"] = str(tmp_path / "home")
+    env["PATH"] = str(empty_bin)
+
+    result = run_cli("doctor", "--global-install", "--json", env=env)
+
+    assert result.returncode == 3
+    payload = json.loads(result.stdout)
+    global_install = payload["evidence"]["global_install"]
+    assert global_install["schema_mismatches"] == []
+    assert global_install["command_mismatches"] == [{
+        "path": "command",
+        "expected": "browser-fetch-router",
+        "actual": None,
+    }]
+
+
 # --- Dispatcher safety net: every command must produce an envelope, never a
 # Python traceback. The CLI's `_emit` wraps every handler so a bug in any
 # handler (raised exception of any type) is converted to a structured payload

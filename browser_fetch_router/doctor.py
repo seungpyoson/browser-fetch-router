@@ -90,7 +90,7 @@ def verify_global_install(command: str = "browser-fetch-router") -> dict[str, An
         "doctor_status": None,
     }
     if not shim:
-        evidence["schema_mismatches"].append({
+        evidence["command_mismatches"].append({
             "path": "command",
             "expected": command,
             "actual": None,
