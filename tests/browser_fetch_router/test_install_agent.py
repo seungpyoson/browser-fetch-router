@@ -493,6 +493,17 @@ def test_install_agent_select_cli_groups_requested_agents(capsys, monkeypatch):
     ]
 
 
+def test_install_agent_cli_choices_come_from_contract_table(monkeypatch):
+    from browser_fetch_router import cli
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setattr(module, "AGENTS", ["sentinel-agent"])
+
+    args = cli.build_parser().parse_args(["install-agent", "sentinel-agent"])
+
+    assert args.agent == "sentinel-agent"
+
+
 def test_install_agent_schema_documents_multi_install_modes():
     from browser_fetch_router.schema import schema_payload
 
@@ -504,6 +515,23 @@ def test_install_agent_schema_documents_multi_install_modes():
     assert {"required": ["agent"]} in install_schema["oneOf"]
     assert {"required": ["--all"]} in install_schema["oneOf"]
     assert {"required": ["--select"]} in install_schema["oneOf"]
+
+
+def test_install_agent_schema_agent_names_come_from_contract_table(monkeypatch):
+    from browser_fetch_router import install_agent as module
+    from browser_fetch_router.schema import schema_payload
+
+    monkeypatch.setattr(module, "AGENTS", ["sentinel-agent", "second-agent"])
+
+    install_schema = schema_payload()["output_schema"]["commandFlags"]["install-agent"]
+
+    assert install_schema["properties"]["agent"]["enum"] == [
+        "sentinel-agent",
+        "second-agent",
+    ]
+    assert "sentinel-agent,second-agent" in (
+        install_schema["properties"]["--select"]["description"]
+    )
 
 
 def test_install_agent_schema_documents_default_and_supported_distinction():

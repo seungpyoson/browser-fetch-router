@@ -55,7 +55,8 @@ Fields:
 - `status`: aggregate command status.
 - `results`: ordered list of `InstallResultEntry`.
 - `artifacts`: flattened successful artifacts.
-- `evidence`: grouped install/skip/failure counts and per-agent evidence.
+- `evidence`: no aggregate summary evidence; per-agent verification evidence lives
+  on each `results[]` entry.
 
 Validation rules:
 

@@ -76,9 +76,9 @@
     "install-agent": {
       "type": "object",
       "properties": {
-        "agent": { "enum": ["claude", "codex", "gemini", "kimi", "opencode", "pi"], "description": "Explicit supported agent to install" },
+        "agent": { "description": "Explicit supported agent to install" },
         "--all": { "type": "boolean", "description": "Install default agents and report supported explicit-only agents as skipped/default_disabled entries" },
-        "--select": { "type": "string", "description": "Comma-separated subset of supported agents: claude,codex,gemini,kimi,opencode,pi" },
+        "--select": { "type": "string", "description": "Comma-separated subset of supported agents" },
         "--force": { "type": "boolean" },
         "--adapter-path": { "type": "string", "description": "Explicit destination file path; basename must be SKILL.md and cannot be combined with --all or --select" },
         "--json": { "type": "boolean" }

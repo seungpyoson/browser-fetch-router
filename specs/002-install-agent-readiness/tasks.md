@@ -1,7 +1,7 @@
 # Tasks: Install-Agent Open-Source Readiness
 
-**Input**: Design documents from `specs/002-install-agent-readiness/`  
-**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/install-agent-cli.md, quickstart.md
+- **Input**: Design documents from `specs/002-install-agent-readiness/`
+- **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/install-agent-cli.md, quickstart.md
 
 **Tests**: Required. Constitution and feature spec require TDD; every behavior task below starts with a failing test.
 

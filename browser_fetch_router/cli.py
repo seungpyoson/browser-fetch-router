@@ -338,10 +338,12 @@ def build_parser() -> argparse.ArgumentParser:
         "install-agent",
         description="Install thin browser-fetch-router agent adapter skills.",
     )
+    from browser_fetch_router.install_agent import AGENTS
+
     install.add_argument(
         "agent",
         nargs="?",
-        choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"],
+        choices=AGENTS,
         help="Explicit supported agent to install.",
     )
     install_mode = install.add_mutually_exclusive_group()

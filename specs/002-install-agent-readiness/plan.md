@@ -15,15 +15,15 @@ installability.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+ package (`pyproject.toml` requires `>=3.11`)  
-**Primary Dependencies**: Existing runtime deps only (`psutil`, `websockets`); no new dependency planned  
-**Storage**: No new persistent storage; installer writes adapter `SKILL.md` files only  
-**Testing**: `pytest`; behavior-first tests through public Python functions and CLI dispatch  
-**Target Platform**: macOS/Linux primary; Windows-safe path handling where stdlib `Path` supports it  
-**Project Type**: Standalone Python CLI/package  
-**Performance Goals**: Install-agent commands remain local filesystem/subprocess checks and complete within existing post-install verification timeout  
-**Constraints**: Shared CLI owns install policy; adapters stay thin; no secrets in plugin/skill files; no hardcoded contributor-local paths; no parallel fallback install paths  
-**Scale/Scope**: One consolidated issue group (#4/#5), six supported agents, package/install docs, targeted install-agent tests plus live smokes
+- **Language/Version**: Python 3.11+ package (`pyproject.toml` requires `>=3.11`)
+- **Primary Dependencies**: Existing runtime deps only (`psutil`, `websockets`); no new dependency planned
+- **Storage**: No new persistent storage; installer writes adapter `SKILL.md` files only
+- **Testing**: `pytest`; behavior-first tests through public Python functions and CLI dispatch
+- **Target Platform**: macOS/Linux primary; Windows-safe path handling where stdlib `Path` supports it
+- **Project Type**: Standalone Python CLI/package
+- **Performance Goals**: Install-agent commands remain local filesystem/subprocess checks and complete within existing post-install verification timeout
+- **Constraints**: Shared CLI owns install policy; adapters stay thin; no secrets in plugin/skill files; no hardcoded contributor-local paths; no parallel fallback install paths
+- **Scale/Scope**: One consolidated issue group (#4/#5), six supported agents, package/install docs, targeted install-agent tests plus live smokes
 
 ## Constitution Check
 

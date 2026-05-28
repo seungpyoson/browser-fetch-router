@@ -30,9 +30,17 @@ def envelope(command: str, status: str, **fields: Any) -> dict[str, Any]:
 
 def schema_payload() -> dict[str, Any]:
     text = resources.files("browser_fetch_router.schemas").joinpath("v1.json").read_text()
+    output_schema = json.loads(text)
+    from browser_fetch_router.install_agent import AGENTS
+
+    install_schema = output_schema["commandFlags"]["install-agent"]
+    install_schema["properties"]["agent"]["enum"] = list(AGENTS)
+    install_schema["properties"]["--select"]["description"] = (
+        "Comma-separated subset of supported agents: " + ",".join(AGENTS)
+    )
     return {
         "schema_version": SCHEMA_VERSION,
-        "output_schema": json.loads(text),
+        "output_schema": output_schema,
         "commands": [
             "read-web",
             "read-user-tabs",

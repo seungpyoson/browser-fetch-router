@@ -1,9 +1,9 @@
 # Feature Specification: Install-Agent Open-Source Readiness
 
-**Feature Branch**: `fix/4-5-install-agent-readiness`  
-**Created**: 2026-05-28  
-**Status**: Draft  
-**Input**: Root-cause packet for GitHub issues #4 and #5 after Claude adversarial review approval.
+- **Feature Branch**: `fix/4-5-install-agent-readiness`
+- **Created**: 2026-05-28
+- **Status**: Draft
+- **Input**: Root-cause packet for GitHub issues #4 and #5 after Claude adversarial review approval.
 
 ## User Scenarios & Testing *(mandatory)*
 

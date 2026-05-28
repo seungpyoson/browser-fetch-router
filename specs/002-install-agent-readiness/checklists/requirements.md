@@ -1,8 +1,8 @@
 # Specification Quality Checklist: Install-Agent Open-Source Readiness
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-05-28  
-**Feature**: [spec.md](../spec.md)
+- **Purpose**: Validate specification completeness and quality before proceeding to planning
+- **Created**: 2026-05-28
+- **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 
