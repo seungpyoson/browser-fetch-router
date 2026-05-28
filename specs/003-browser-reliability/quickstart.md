@@ -130,4 +130,4 @@ global command is stale, the verifier returns `stale_global_install` with a
 - Registry-backed Parallel paid smoke -> `status: ok`, `provider: parallel`
 - Live Reddit listing smoke -> `status: ok`, `provider: reddit-json`
 - Live temporary-profile CDP smoke -> `/json/version`, `read-user-tabs list`, `list --all`, `read active`, and `screenshot active` all passed; the temporary Chrome instance was closed afterward
-- Browser Use Cloud live smoke -> pending until `BROWSER_USE_API_KEY` is available from the key registry
+- Browser Use Cloud live smoke -> `status: ok`, `provider: browser-use-cloud`, content contained `"Example Domain"`, `remote_status: stopped`, `step_count: 0`, and `total_cost_usd: 0.004498000000000000261901611509`

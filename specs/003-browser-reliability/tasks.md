@@ -122,7 +122,7 @@
 - [x] T033 [US4] Mark Browserbase and local providers as live only if implemented, otherwise unavailable/pending, in `browser_fetch_router/interactive.py`
 - [x] T034 [US4] Reflect provider capability truth in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
 - [x] T035 [US4] Update interactive provider guidance in `README.md`, `docs/browser-fetch-router-interactive-browser-contract.md`, and all adapter files under `browser_fetch_router/adapters/`
-- [ ] T036 [US4] Run a credentialed Browser Use Cloud smoke and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
+- [x] T036 [US4] Run a credentialed Browser Use Cloud smoke and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 4 is independently testable through schema/help and provider-specific CLI smokes.
 
