@@ -147,10 +147,17 @@ def _emit(
         # We've audited and emitted the envelope. Exit cleanly with the
         # POSIX SIGINT code instead of letting KeyboardInterrupt propagate
         # (which would print a traceback to stderr).
-        return STATUS_EXIT_CODES[payload["status"]]
+        return _exit_code_for_payload(payload)
     if exit_code_fn is not None:
         return exit_code_fn(payload)
-    return STATUS_EXIT_CODES[payload["status"]]
+    return _exit_code_for_payload(payload)
+
+
+def _exit_code_for_payload(payload: dict) -> int:
+    return STATUS_EXIT_CODES.get(
+        payload.get("status"),
+        STATUS_EXIT_CODES["internal_error"],
+    )
 
 
 def _serialize_or_internal_error(
@@ -334,13 +341,37 @@ def build_parser() -> argparse.ArgumentParser:
     acceptance.add_argument("--include-network", action="store_true")
     acceptance.add_argument("--include-paid", action="store_true")
 
-    install = sub.add_parser("install-agent")
-    install.add_argument("agent", nargs="?", choices=["claude", "codex", "gemini", "kimi", "opencode", "pi"])
+    install = sub.add_parser(
+        "install-agent",
+        description="Install thin browser-fetch-router agent adapter skills.",
+    )
+    from browser_fetch_router.install_agent import AGENTS
+
+    install.add_argument(
+        "agent",
+        nargs="?",
+        choices=AGENTS,
+        help="Explicit supported agent to install.",
+    )
     install_mode = install.add_mutually_exclusive_group()
-    install_mode.add_argument("--all", action="store_true")
-    install_mode.add_argument("--select")
-    install.add_argument("--force", action="store_true")
-    install.add_argument("--adapter-path")
+    install_mode.add_argument(
+        "--all",
+        action="store_true",
+        help="Install default agents and report explicit-only agents as skipped.",
+    )
+    install_mode.add_argument(
+        "--select",
+        help="Comma-separated subset of supported agents to install.",
+    )
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing adapter.",
+    )
+    install.add_argument(
+        "--adapter-path",
+        help="Explicit destination file path; basename must be SKILL.md.",
+    )
     install.add_argument("--json", action="store_true")
 
     return parser
@@ -447,7 +478,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
             return _emit(
                 "install-agent",
-                handler=lambda: install_agents(selected_agents, force=args.force),
+                handler=lambda: install_agents(
+                    selected_agents,
+                    force=args.force,
+                    default_mode=args.all,
+                ),
             )
         if not args.agent:
             return _usage_error(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -32,11 +34,78 @@ SAFE_ENV_KEYS = {
     "BFR_CDP_URL",
 }
 
-AGENTS = ["claude", "codex", "gemini", "kimi", "opencode", "pi"]
+KIMI_INHERITANCE_WARNING = {
+    "code": "kimi_brand_root_inheritance",
+    "message": (
+        "Writing Kimi's brand skill root can change Claude/Codex skill "
+        "inheritance behavior."
+    ),
+}
+
+KIMI_DEFAULT_SKIP_REASON = {
+    "code": "default_disabled",
+    "message": (
+        "Kimi is supported only by explicit opt-in because its brand skill "
+        "root can change Claude/Codex inheritance behavior."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class AgentInstallContract:
+    name: str
+    root_parts: tuple[str, ...]
+    env_var: str | None = None
+    default_enabled: bool = True
+    default_skip_reason: dict[str, str] | None = None
+    explicit_warning: dict[str, str] | None = None
+    create_root_on_explicit: bool = False
+
+    def root(self) -> Path:
+        if self.env_var and (override := os.environ.get(self.env_var)):
+            return Path(override).expanduser()
+        return home().joinpath(*self.root_parts)
+
+    def destination(self) -> Path:
+        return self.root() / "skills" / "browser-fetch-router" / "SKILL.md"
+
+
+_AGENT_CONTRACTS = (
+    AgentInstallContract("claude", (".claude",)),
+    AgentInstallContract("codex", (".codex",), env_var="CODEX_HOME"),
+    AgentInstallContract("gemini", (".gemini",), env_var="GEMINI_HOME"),
+    AgentInstallContract(
+        "kimi",
+        (".kimi",),
+        env_var="KIMI_HOME",
+        default_enabled=False,
+        default_skip_reason=KIMI_DEFAULT_SKIP_REASON,
+        explicit_warning=KIMI_INHERITANCE_WARNING,
+        create_root_on_explicit=True,
+    ),
+    AgentInstallContract(
+        "opencode",
+        (".config", "opencode"),
+        env_var="OPENCODE_HOME",
+    ),
+    AgentInstallContract("pi", (".pi", "agent"), env_var="PI_HOME"),
+)
+
+INSTALL_CONTRACTS = {contract.name: contract for contract in _AGENT_CONTRACTS}
+AGENTS = [contract.name for contract in _AGENT_CONTRACTS]
 
 
 def _safe_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
+
+
+def _unknown_agent_error(agents: list[str]) -> dict[str, str]:
+    unknown = ", ".join(agents)
+    supported = ", ".join(AGENTS)
+    return {
+        "code": "unknown_agent",
+        "message": f"Unknown agent(s): {unknown}. Supported agents: {supported}.",
+    }
 
 
 def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
@@ -55,37 +124,67 @@ def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
             return validate_skill_md_dest(path)
         except UnsafeDestination as exc:
             raise ValueError(str(exc)) from exc
-    h = home()
-    mapping = {
-        "claude": h / ".claude" / "skills" / "browser-fetch-router" / "SKILL.md",
-        "codex": Path(os.environ.get("CODEX_HOME", str(h / ".codex"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "gemini": Path(os.environ.get("GEMINI_HOME", str(h / ".gemini"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "kimi": Path(os.environ.get("KIMI_HOME", str(h / ".kimi"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "opencode": Path(os.environ.get("OPENCODE_HOME", str(h / ".config" / "opencode"))) / "skills" / "browser-fetch-router" / "SKILL.md",
-        "pi": Path(os.environ.get("PI_HOME", str(h / ".config" / "pi"))) / "skills" / "browser-fetch-router" / "SKILL.md",
+    return INSTALL_CONTRACTS[agent].destination()
+
+
+def _default_skip_entry(agent: str, contract: AgentInstallContract) -> dict[str, Any]:
+    return {
+        "agent": agent,
+        "status": "skipped",
+        "artifacts": [],
+        "skip_reason": contract.default_skip_reason,
     }
-    return mapping[agent]
+
+
+def _install_result_entry(agent: str, result: dict[str, Any]) -> dict[str, Any]:
+    entry = {
+        "agent": agent,
+        "status": result.get("status"),
+        "artifacts": result.get("artifacts") or [],
+    }
+    for key in ("error", "evidence", "warnings"):
+        if result.get(key):
+            entry[key] = result[key]
+    return entry
 
 
 def install_agents(
     agents: list[str],
     *,
     force: bool = False,
+    default_mode: bool = False,
 ) -> dict[str, Any]:
+    invalid = [agent for agent in agents if agent not in INSTALL_CONTRACTS]
+    if invalid:
+        return envelope(
+            command="install-agent",
+            status="usage_error",
+            error=_unknown_agent_error(invalid),
+            results=[],
+        )
+
     results = []
     all_ok = True
+    shared_verification: dict[str, Any] | None = None
+
+    def shared_verification_runner() -> dict[str, Any]:
+        nonlocal shared_verification
+        if shared_verification is None:
+            shared_verification = _run_verification()
+        return shared_verification
+
     for agent in agents:
-        result = install_agent(agent, force=force)
-        entry = {
-            "agent": agent,
-            "status": result.get("status"),
-            "artifacts": result.get("artifacts") or [],
-        }
-        if result.get("error"):
-            entry["error"] = result["error"]
-        if result.get("evidence"):
-            entry["evidence"] = result["evidence"]
-        if result.get("status") != "ok":
+        contract = INSTALL_CONTRACTS[agent]
+        if default_mode and not contract.default_enabled:
+            results.append(_default_skip_entry(agent, contract))
+            continue
+        result = install_agent(
+            agent,
+            force=force,
+            verification_runner=shared_verification_runner,
+        )
+        entry = _install_result_entry(agent, result)
+        if result.get("status") not in {"ok", "skipped"}:
             all_ok = False
         results.append(entry)
     return envelope(
@@ -96,7 +195,6 @@ def install_agents(
             for entry in results
             for artifact in entry.get("artifacts", [])
         ],
-        evidence={"results": results},
         results=results,
     )
 
@@ -116,7 +214,12 @@ render_adapter = adapter_text
 
 
 def verification_commands(agent: str) -> list[list[str]]:
-    """Return the post-install verification commands the installer runs."""
+    """Return user-facing post-install verification command equivalents.
+
+    _run_verification() executes the same CLI entry points through
+    ``sys.executable -m browser_fetch_router`` so the active interpreter and
+    import path are what get verified at install time.
+    """
     return [
         ["browser-fetch-router", "--help"],
         ["browser-fetch-router", "schema", "--json"],
@@ -145,7 +248,21 @@ Adapter agent: {agent}
 """
 
 
-def install_agent(agent: str, *, force: bool = False, adapter_path: str | None = None) -> dict[str, Any]:
+def install_agent(
+    agent: str,
+    *,
+    force: bool = False,
+    adapter_path: str | None = None,
+    verification: dict[str, Any] | None = None,
+    verification_runner: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    contract = INSTALL_CONTRACTS.get(agent)
+    if contract is None:
+        return envelope(
+            command="install-agent",
+            status="usage_error",
+            error=_unknown_agent_error([agent]),
+        )
     try:
         dest = destination_for(agent, adapter_path=adapter_path)
     except ValueError as exc:
@@ -154,33 +271,52 @@ def install_agent(agent: str, *, force: bool = False, adapter_path: str | None =
             status="tool_setup_failed",
             error={"code": "invalid_adapter_path", "message": str(exc)},
         )
-    if not adapter_path and not dest.parent.parent.exists():
+    warnings = []
+    if not adapter_path and contract.explicit_warning:
+        warnings.append(contract.explicit_warning)
+    try:
+        if not adapter_path and contract.create_root_on_explicit:
+            dest.parent.parent.mkdir(parents=True, exist_ok=True)
+        if not adapter_path and not dest.parent.parent.exists():
+            return envelope(
+                command="install-agent",
+                status="tool_setup_failed",
+                error={
+                    "code": "agent_adapter_path_unverified",
+                    "message": f"Default adapter directory {dest.parent.parent} not found. Provide --adapter-path if your agent uses a different location.",
+                },
+            )
+        if dest.exists() and not force:
+            return envelope(
+                command="install-agent",
+                status="tool_setup_failed",
+                error={"code": "adapter_exists", "message": "Pass --force to overwrite"},
+                artifacts=[{"path": str(dest)}],
+            )
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Route through atomic_write_bytes so a partial write (signal mid-
+        # call, disk-full, permission edge) cannot leave a half-written
+        # SKILL.md that the next agent invocation parses as truncated YAML
+        # / markdown. Mode 0o644 keeps SKILL.md operator-readable — it is
+        # not a credential file (the persistence-contract 0o600 default is
+        # for internal state, not operator-facing config). Class fix r15-03
+        # (no `path.write_text` / `path.write_bytes` in production code;
+        # static guard locks the invariant in).
+        atomic_write_bytes(dest, adapter_text(agent).encode("utf-8"), mode=0o644)
+    except OSError as exc:
         return envelope(
             command="install-agent",
             status="tool_setup_failed",
             error={
-                "code": "agent_adapter_path_unverified",
-                "message": f"Default adapter directory {dest.parent.parent} not found. Provide --adapter-path if your agent uses a different location.",
+                "code": "adapter_write_failed",
+                "message": str(exc),
+                "type": type(exc).__name__,
             },
-        )
-    if dest.exists() and not force:
-        return envelope(
-            command="install-agent",
-            status="tool_setup_failed",
-            error={"code": "adapter_exists", "message": "Pass --force to overwrite"},
             artifacts=[{"path": str(dest)}],
         )
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    # Route through atomic_write_bytes so a partial write (signal mid-
-    # call, disk-full, permission edge) cannot leave a half-written
-    # SKILL.md that the next agent invocation parses as truncated YAML
-    # / markdown. Mode 0o644 keeps SKILL.md operator-readable — it is
-    # not a credential file (the persistence-contract 0o600 default is
-    # for internal state, not operator-facing config). Class fix r15-03
-    # (no `path.write_text` / `path.write_bytes` in production code;
-    # static guard locks the invariant in).
-    atomic_write_bytes(dest, adapter_text(agent).encode("utf-8"), mode=0o644)
-    verification = _run_verification()
+    if verification is None:
+        verification_fn = verification_runner or _run_verification
+        verification = verification_fn()
     if not verification["success"]:
         return envelope(
             command="install-agent",
@@ -191,12 +327,13 @@ def install_agent(agent: str, *, force: bool = False, adapter_path: str | None =
             },
             artifacts=[{"path": str(dest)}, {"verification": verification}],
         )
-    return envelope(
-        command="install-agent",
-        status="ok",
-        artifacts=[{"path": str(dest)}],
-        evidence={"verification": verification},
-    )
+    fields: dict[str, Any] = {
+        "artifacts": [{"path": str(dest)}],
+        "evidence": {"verification": verification},
+    }
+    if warnings:
+        fields["warnings"] = warnings
+    return envelope(command="install-agent", status="ok", **fields)
 
 
 def _run_verification() -> dict[str, Any]:
