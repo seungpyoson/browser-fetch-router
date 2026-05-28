@@ -141,6 +141,65 @@ def test_read_web_paid_fallback_uses_parallel_extract_v1_response(monkeypatch, t
     assert client.requests[0]["url"] == "https://api.parallel.ai/v1/extract"
 
 
+def test_read_web_paid_fallback_uses_parallel_specific_default_timeout(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PARALLEL_API_KEY", "test-parallel-key")
+    from browser_fetch_router import read_web as module
+
+    monkeypatch.setattr(
+        module,
+        "fetch_jina",
+        lambda url, ctx: {
+            "status": "insufficient_content",
+            "provider": "jina-reader",
+            "route": "jina-reader",
+            "evidence": {},
+            "error": {"code": "jina_low_quality"},
+        },
+    )
+
+    class _DefaultPrimaryClient:
+        def request(self, *_args, **_kwargs) -> _Response:
+            raise AssertionError("generic primary client must not run paid fallback")
+
+    captured: dict[str, float] = {}
+
+    class _ParallelTimeoutClient:
+        def __init__(self, timeout: float = 30.0) -> None:
+            captured["timeout"] = timeout
+
+        def request(self, *_args, **_kwargs) -> _Response:
+            return _Response(
+                200,
+                json.dumps(
+                    {
+                        "extract_id": "extract_123",
+                        "results": [
+                            {
+                                "url": "https://example.com/article",
+                                "excerpts": ["Recovered by paid extract."],
+                            }
+                        ],
+                        "errors": [],
+                        "session_id": "session_123",
+                    }
+                ),
+            )
+
+    monkeypatch.setattr(module, "SafeHttpClient", _DefaultPrimaryClient)
+    monkeypatch.setattr(parallel, "SafeHttpClient", _ParallelTimeoutClient)
+
+    payload = module.read_web(
+        "https://example.com/article",
+        allow_paid=True,
+        no_cache=True,
+    )
+
+    assert payload["status"] == "ok"
+    assert payload["provider"] == "parallel"
+    assert captured["timeout"] >= 60.0
+
+
 def test_parallel_extract_uses_v1_api_shape_and_reads_excerpts(monkeypatch):
     monkeypatch.setenv("PARALLEL_API_KEY", "test-parallel-key")
     client = _RequestClient(
@@ -192,6 +251,37 @@ def test_parallel_extract_uses_v1_api_shape_and_reads_excerpts(monkeypatch):
     assert body["urls"] == ["https://example.com/article"]
     assert isinstance(body["objective"], str)
     assert "Extract" in body["objective"]
+
+
+def test_parallel_extract_strips_full_content(monkeypatch):
+    monkeypatch.setenv("PARALLEL_API_KEY", "test-parallel-key")
+    client = _RequestClient(
+        _Response(
+            200,
+            json.dumps(
+                {
+                    "extract_id": "extract_123",
+                    "results": [
+                        {
+                            "url": "https://example.com/article",
+                            "title": "Example Article",
+                            "full_content": "\n\n# Example Article\n\nRecovered by paid extract.\n\n",
+                        }
+                    ],
+                    "errors": [],
+                    "session_id": "session_123",
+                }
+            ),
+        )
+    )
+
+    result = parallel.fetch(
+        "https://example.com/article",
+        {"allow_paid": True, "http_client": client},
+    )
+
+    assert result["status"] == "ok"
+    assert result["content_markdown"] == "# Example Article\n\nRecovered by paid extract."
 
 
 def test_parallel_extract_uses_provider_specific_timeout(monkeypatch):
@@ -303,6 +393,37 @@ def test_parallel_extract_maps_rate_limit(monkeypatch):
         "code": "parallel_rate_limited",
         "http_status": 429,
         "message": "Rate limit exceeded",
+        "ref_id": "extract_123",
+    }
+
+
+def test_parallel_extract_maps_auth_failure(monkeypatch):
+    monkeypatch.setenv("PARALLEL_API_KEY", "test-parallel-key")
+    client = _RequestClient(
+        _Response(
+            401,
+            json.dumps(
+                {
+                    "type": "error",
+                    "error": {
+                        "ref_id": "extract_123",
+                        "message": "Invalid API key",
+                    },
+                }
+            ),
+        )
+    )
+
+    result = parallel.fetch(
+        "https://example.com/article",
+        {"allow_paid": True, "http_client": client},
+    )
+
+    assert result["status"] == "quota_or_key_missing"
+    assert result["error"] == {
+        "code": "parallel_auth_failed",
+        "http_status": 401,
+        "message": "Invalid API key",
         "ref_id": "extract_123",
     }
 

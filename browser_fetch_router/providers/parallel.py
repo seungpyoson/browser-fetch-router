@@ -131,7 +131,7 @@ def _first_result_for_url(data: dict[str, Any], url: str) -> dict[str, Any]:
 def _content_from_result(result: dict[str, Any]) -> str:
     full_content = result.get("full_content")
     if isinstance(full_content, str) and full_content.strip():
-        return full_content
+        return full_content.strip()
     excerpts = result.get("excerpts")
     if isinstance(excerpts, list):
         parts = [

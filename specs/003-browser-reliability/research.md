@@ -103,3 +103,15 @@
 - In the same ephemeral key session, `HOME=/private/tmp/bfr-paid-smoke-home python3 -m browser_fetch_router test-acceptance --include-network --include-paid --json` exited `0`; `19` cases passed, `0` failed, and `parallel-paid-extract` returned `ok`.
 - An exact-secret worktree scan using the key supplied only through stdin found `0` matches.
 - `git diff --check` exited `0`.
+
+**Reviewer follow-up evidence**:
+
+- A TDD regression test proved the normal `read_web(..., allow_paid=True)` path was still handing Parallel the generic primary `SafeHttpClient` instead of Parallel's provider-specific 90s client; the red result was `provider_unavailable` when the generic primary client was guarded against paid fallback use.
+- The fix preserves explicitly injected test/client behavior, but removes only the internally-created primary client before dispatching paid fallback so `parallel.fetch()` constructs its own 90s client.
+- Added coverage for registry-relevant auth failure mapping (`401` -> `quota_or_key_missing` / `parallel_auth_failed`) and normalized `full_content` trimming to match excerpt trimming.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_acceptance_contract.py -q` exited `0` with `54 passed`.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `719 passed` when rerun outside the macOS sandbox; the sandboxed run failed only at the known real-subprocess cleanup test because `psutil` process enumeration was denied.
+- `git diff --check` exited `0`; tracked-file contributor-path sweep found `0` matches; secret-pattern sweep found only documented placeholders and the pre-existing fake audit fixture.
+- Package installability passed from `/private/tmp`: `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` all exited `0`.
+- Registry-backed current-package paid smoke exited `0` with `status: ok`, `provider: parallel`, and `content_markdown: Hello World!`.
+- Registry-backed current-package paid acceptance exited `0`; `19` cases passed, `0` failed, and `parallel-paid-extract` returned `ok`.
