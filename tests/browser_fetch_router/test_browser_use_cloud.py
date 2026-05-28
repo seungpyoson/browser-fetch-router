@@ -92,6 +92,76 @@ def test_browser_use_cloud_posts_safe_low_cost_session_and_polls_to_output():
     assert client.calls[1]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-1"
 
 
+def test_browser_use_cloud_uses_last_step_summary_when_output_is_missing():
+    from browser_fetch_router.providers import browser_use_cloud
+
+    client = FakeHttpClient([
+        FakeResponse(200, {"id": "sess-summary", "status": "running"}),
+        FakeResponse(
+            200,
+            {
+                "id": "sess-summary",
+                "status": "stopped",
+                "lastStepSummary": "Example Domain loaded successfully.",
+                "stepCount": 1,
+                "totalCostUsd": "0.01",
+            },
+        ),
+    ])
+
+    result = browser_use_cloud.run_task(
+        "open page https://example.com and summarize it",
+        api_key="bu_test",
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+        http_client=client,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "ok"
+    assert result["content_markdown"] == "Example Domain loaded successfully."
+    assert result["evidence"]["remote_status"] == "stopped"
+    assert [call["method"] for call in client.calls] == ["POST", "GET"]
+
+
+def test_browser_use_cloud_empty_terminal_output_returns_provider_error():
+    from browser_fetch_router.providers import browser_use_cloud
+
+    client = FakeHttpClient([
+        FakeResponse(
+            200,
+            {
+                "id": "sess-empty",
+                "status": "stopped",
+                "stepCount": 0,
+                "totalCostUsd": "0.00",
+            },
+        )
+    ])
+
+    result = browser_use_cloud.run_task(
+        "open page https://example.com and report the title",
+        api_key="bu_test",
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+        http_client=client,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_empty_output"
+    assert result["evidence"] == {
+        "provider": "browser-use-cloud",
+        "session_id": "sess-empty",
+        "remote_status": "stopped",
+        "step_count": 0,
+        "total_cost_usd": "0.00",
+    }
+    assert [call["method"] for call in client.calls] == ["POST"]
+
+
 def test_browser_use_cloud_maps_auth_failure_to_missing_quota_or_key():
     from browser_fetch_router.providers import browser_use_cloud
 
@@ -231,6 +301,7 @@ def test_browser_use_cloud_stops_running_session_when_poll_returns_http_error():
     assert result["status"] == "provider_unavailable"
     assert result["error"]["code"] == "browser_use_cloud_http_error"
     assert result["error"]["http_status"] == 500
+    assert result["error"]["detail"] == "temporary provider failure"
     assert result["evidence"]["remote_status"] == "stopped"
     assert result["evidence"]["total_cost_usd"] == "0.04"
     assert [call["method"] for call in client.calls] == ["POST", "GET", "POST"]
