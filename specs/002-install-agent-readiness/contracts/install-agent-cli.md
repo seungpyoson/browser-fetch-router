@@ -74,6 +74,8 @@ Expected behavior:
 
 Kimi explicit installs must include warning metadata in JSON. The warning must be visible in both single-agent and `--select kimi` flows and must not be emitted for `--all` default-disabled skip unless the skip reason already covers inheritance.
 
+Single-agent installs expose warnings at top-level `warnings`. Multi-agent installs, including `--select kimi`, expose warnings on the affected `results[]` entry so callers can associate each warning with the agent that produced it.
+
 Warning shape:
 
 ```json

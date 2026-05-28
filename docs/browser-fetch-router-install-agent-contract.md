@@ -42,6 +42,11 @@ Explicit Kimi installs include:
 }
 ```
 
+Single-agent installs expose warnings at top-level `warnings`. Multi-agent
+installs, including `--select kimi`, expose warnings on the affected
+`results[]` entry so callers can associate each warning with the agent that
+produced it.
+
 Default multi-install reports Kimi as:
 
 ```json

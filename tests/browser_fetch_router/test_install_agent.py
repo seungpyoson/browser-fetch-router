@@ -177,6 +177,31 @@ def test_explicit_kimi_creates_root_and_warns(tmp_path, monkeypatch):
     assert result["warnings"][0]["code"] == "kimi_brand_root_inheritance"
 
 
+def test_explicit_kimi_adapter_path_suppresses_brand_root_warning(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import install_agent as module
+
+    custom_dest = (
+        tmp_path / "project" / "skills" / "browser-fetch-router" / "SKILL.md"
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_verification",
+        lambda: {"success": True, "failures": []},
+    )
+
+    result = module.install_agent(
+        "kimi",
+        force=True,
+        adapter_path=str(custom_dest),
+    )
+
+    assert result["status"] == "ok"
+    assert "warnings" not in result
+    assert custom_dest.exists()
+
+
 def test_select_kimi_installs_and_preserves_warning(tmp_path, monkeypatch):
     from browser_fetch_router import install_agent as module
 

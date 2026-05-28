@@ -178,7 +178,12 @@ render_adapter = adapter_text
 
 
 def verification_commands(agent: str) -> list[list[str]]:
-    """Return the post-install verification commands the installer runs."""
+    """Return user-facing post-install verification command equivalents.
+
+    _run_verification() executes the same CLI entry points through
+    ``sys.executable -m browser_fetch_router`` so the active interpreter and
+    import path are what get verified at install time.
+    """
     return [
         ["browser-fetch-router", "--help"],
         ["browser-fetch-router", "schema", "--json"],
