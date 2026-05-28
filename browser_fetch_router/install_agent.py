@@ -158,7 +158,6 @@ def install_agents(
             for entry in results
             for artifact in entry.get("artifacts", [])
         ],
-        evidence={"results": results},
         results=results,
     )
 

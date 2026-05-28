@@ -222,6 +222,28 @@ def test_select_kimi_installs_and_preserves_warning(tmp_path, monkeypatch):
     )
 
 
+def test_install_agents_does_not_duplicate_results_under_evidence(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
+    module.destination_for("codex").parent.parent.mkdir(parents=True)
+    monkeypatch.setattr(
+        module,
+        "_run_verification",
+        lambda: {"success": True, "failures": []},
+    )
+
+    result = module.install_agents(["codex"], force=True)
+
+    assert result["results"][0]["agent"] == "codex"
+    assert result["results"][0]["status"] == "ok"
+    assert result["results"][0]["evidence"]["verification"]["success"] is True
+    assert result["evidence"] is None
+
+
 def test_explicit_pi_cli_writes_documented_default(capsys, tmp_path, monkeypatch):
     from browser_fetch_router import cli
     from browser_fetch_router import install_agent as module
