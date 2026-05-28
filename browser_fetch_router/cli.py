@@ -369,7 +369,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum task steps; cloud sessions poll provider stepCount and stop at the cap",
     )
     browser.add_argument("--max-duration-sec", type=int, default=300)
-    browser.add_argument("--max-cost-usd", type=float, default=0.25)
+    browser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=0.25,
+        help=(
+            "Per-call and per-session hosted-browser cap; "
+            "daily cap uses BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD"
+        ),
+    )
 
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--global-install", action="store_true")

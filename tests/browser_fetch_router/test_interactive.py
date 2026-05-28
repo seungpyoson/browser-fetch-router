@@ -489,7 +489,7 @@ def test_cloud_session_cap_blocks_second_call_before_provider(tmp_path, monkeypa
     assert ledger.is_paid_disabled("bfr-cloud-cumulative")
 
 
-def test_cloud_daily_cap_blocks_cross_session_call_before_provider(tmp_path, monkeypatch):
+def test_cloud_default_daily_cap_allows_fresh_session_after_prior_cost(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
     from browser_fetch_router.cost import CostLedger
     from browser_fetch_router.providers import browser_use_cloud
@@ -532,13 +532,65 @@ def test_cloud_daily_cap_blocks_cross_session_call_before_provider(tmp_path, mon
     )
 
     assert first["status"] == "ok"
+    assert second["status"] == "ok"
+    assert len(calls) == 2
+
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-day-a") == 0.18
+    assert ledger.session_total("bfr-cloud-day-b") == 0.18
+
+
+def test_cloud_configured_daily_cap_blocks_cross_session_call_before_provider(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browser-use-cloud",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": f"remote-{len(calls)}",
+                "remote_status": "stopped",
+                "step_count": 1,
+                "total_cost_usd": "0.18",
+            },
+        }
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setenv("BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD", "0.25")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-day-capped-a")
+    first = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-day-capped-b")
+    second = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert first["status"] == "ok"
     assert second["status"] == "cost_cap_exceeded"
     assert second["evidence"]["reason"] == "paid_session_disabled_or_cap_exceeded"
     assert len(calls) == 1
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-day-a") == 0.18
-    assert ledger.session_total("bfr-cloud-day-b") == 0.0
+    assert ledger.session_total("bfr-cloud-day-capped-a") == 0.18
+    assert ledger.session_total("bfr-cloud-day-capped-b") == 0.0
 
 
 def test_cloud_reported_cost_equal_to_cap_is_recorded(tmp_path, monkeypatch):

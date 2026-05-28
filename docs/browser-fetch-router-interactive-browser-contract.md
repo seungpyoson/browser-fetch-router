@@ -28,10 +28,13 @@ browser-fetch-router interactive-browser \
   --json
 ```
 
-The CLI applies `--max-cost-usd` as the request, session, and daily cap until
-separate knobs exist. Browser Use Cloud does not expose a create-session
-`maxSteps` field; the CLI enforces `--max-steps` by polling provider
-`stepCount` and stopping a nonterminal session when the cap is reached.
+The CLI applies `--max-cost-usd` as the per-call and per-session cap. Daily
+hosted-browser spend is capped separately by
+`BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD`, defaulting to `5.0`, so one successful
+hosted call does not block later fresh sessions for the rest of the day. Browser
+Use Cloud does not expose a create-session `maxSteps` field; the CLI enforces
+`--max-steps` by polling provider `stepCount` and stopping a nonterminal session
+when the cap is reached.
 
 Secrets must come from documented environment variables or the user's local key
 registry. They must not be stored in docs, adapters, tests, or plugin files.

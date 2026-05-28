@@ -14,6 +14,8 @@ from browser_fetch_router.schema import envelope
 from browser_fetch_router.session import current_session_id
 
 HOSTED_BROWSER_DEFAULT_COST_USD = 0.25
+HOSTED_BROWSER_DEFAULT_DAILY_COST_USD = 5.0
+HOSTED_BROWSER_DAILY_COST_CAP_ENV = "BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD"
 
 _PROVIDER_CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
@@ -210,6 +212,17 @@ def _hosted_cost_cap(value: float) -> float | None:
     return float(value)
 
 
+def _hosted_daily_cost_cap() -> float | None:
+    raw = os.environ.get(HOSTED_BROWSER_DAILY_COST_CAP_ENV)
+    if raw is None or raw == "":
+        return HOSTED_BROWSER_DEFAULT_DAILY_COST_USD
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return _hosted_cost_cap(value)
+
+
 def _reserve_hosted_cost(
     ledger: CostLedger,
     session_id: str,
@@ -217,17 +230,18 @@ def _reserve_hosted_cost(
     amount: float,
     *,
     request_cap: float,
+    daily_cap: float,
 ) -> str | bool:
-    # The public CLI exposes one hosted-browser cost cap. Until separate
-    # request/session/day knobs exist, fail closed by applying that cap to
-    # all three ledger dimensions.
+    # `--max-cost-usd` is the per-call/session guard. Daily spend must be
+    # independent so a prior hosted call does not make every later fresh
+    # session impossible for the rest of the day.
     return ledger.reserve(
         session_id,
         provider,
         amount,
         request_cap=request_cap,
         session_cap=request_cap,
-        daily_cap=request_cap,
+        daily_cap=daily_cap,
     )
 
 
@@ -266,6 +280,7 @@ def _record_reported_hosted_cost(
     provider: str,
     reported_cost: Decimal,
     cost_cap: float,
+    daily_cap: float,
 ) -> dict[str, Any] | None:
     ledger.release(reservation)
     recorded = _reserve_hosted_cost(
@@ -274,6 +289,7 @@ def _record_reported_hosted_cost(
         provider,
         float(reported_cost),
         request_cap=cost_cap,
+        daily_cap=daily_cap,
     )
     if recorded:
         return None
@@ -351,6 +367,16 @@ def run_interactive_browser(
                 status="usage_error",
                 error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
             )
+        daily_cap = _hosted_daily_cost_cap()
+        if daily_cap is None:
+            return envelope(
+                command="interactive-browser",
+                status="usage_error",
+                error={
+                    "code": "invalid_daily_cost_cap",
+                    "env": HOSTED_BROWSER_DAILY_COST_CAP_ENV,
+                },
+            )
         session_id = current_session_id()
         ledger = CostLedger(state_dir() / "cost.db")
         reservation = _reserve_hosted_cost(
@@ -359,6 +385,7 @@ def run_interactive_browser(
             "browserbase",
             cost_cap,
             request_cap=cost_cap,
+            daily_cap=daily_cap,
         )
         if not reservation:
             return _cost_cap_exceeded(
@@ -414,6 +441,7 @@ def run_interactive_browser(
                     provider="browserbase",
                     reported_cost=reported_cost,
                     cost_cap=cost_cap,
+                    daily_cap=daily_cap,
                 )
                 if cost_error:
                     return cost_error
@@ -428,6 +456,7 @@ def run_interactive_browser(
                 provider="browserbase",
                 reported_cost=reported_cost,
                 cost_cap=cost_cap,
+                daily_cap=daily_cap,
             )
             if cost_error:
                 return cost_error
@@ -451,6 +480,16 @@ def run_interactive_browser(
                 status="usage_error",
                 error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
             )
+        daily_cap = _hosted_daily_cost_cap()
+        if daily_cap is None:
+            return envelope(
+                command="interactive-browser",
+                status="usage_error",
+                error={
+                    "code": "invalid_daily_cost_cap",
+                    "env": HOSTED_BROWSER_DAILY_COST_CAP_ENV,
+                },
+            )
         session_id = current_session_id()
         ledger = CostLedger(state_dir() / "cost.db")
         reservation = _reserve_hosted_cost(
@@ -459,6 +498,7 @@ def run_interactive_browser(
             "browser-use-cloud",
             cost_cap,
             request_cap=cost_cap,
+            daily_cap=daily_cap,
         )
         if not reservation:
             return _cost_cap_exceeded(
@@ -513,6 +553,7 @@ def run_interactive_browser(
                     provider="browser-use-cloud",
                     reported_cost=reported_cost,
                     cost_cap=cost_cap,
+                    daily_cap=daily_cap,
                 )
                 if cost_error:
                     return cost_error
@@ -527,6 +568,7 @@ def run_interactive_browser(
                 provider="browser-use-cloud",
                 reported_cost=reported_cost,
                 cost_cap=cost_cap,
+                daily_cap=daily_cap,
             )
             if cost_error:
                 return cost_error

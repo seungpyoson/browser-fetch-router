@@ -25,7 +25,8 @@ With `BROWSER_USE_API_KEY` present and hosted browser opt-in:
 - `evidence.total_cost_usd`: provider-reported cost when available
 - Browser Use Cloud v3 does not expose a create-session `maxSteps` request field; the CLI enforces `--max-steps` by polling `stepCount` and stopping a nonterminal cloud session when the cap is reached.
 - Cost ledger records the actual reported cost or disables the session on overrun
-- The single `--max-cost-usd` value is applied as the request, session, and daily hosted-browser cap until separate knobs exist.
+- `--max-cost-usd` is the per-call and per-session hosted-browser cap.
+- Daily hosted-browser spend is capped separately by `BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD`, defaulting to `5.0`, so fresh sessions remain usable after earlier same-day hosted calls.
 
 ## Browserbase And Local Mode Contract
 

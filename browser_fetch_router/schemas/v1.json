@@ -63,7 +63,7 @@
         "--confirm-irreversible": { "type": "string" },
         "--max-steps": { "type": "integer", "default": 10, "description": "Maximum interactive task steps. Browser Use Cloud is enforced by polling provider stepCount and stopping nonterminal sessions at the cap." },
         "--max-duration-sec": { "type": "integer", "default": 300 },
-        "--max-cost-usd": { "type": "number", "default": 0.25 }
+        "--max-cost-usd": { "type": "number", "default": 0.25, "description": "Per-call and per-session hosted-browser cap. Daily hosted-browser cap uses BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD, default 5.0." }
       }
     },
     "doctor": {
