@@ -247,6 +247,21 @@ class CostLedger:
 
     # --------- Paid-disabled sessions ---------------------------------------
 
+    def disable_session(self, session_id: str, reason: str) -> None:
+        with _connect(self.path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT OR REPLACE INTO paid_disabled_sessions(session_id, reason, created_at) VALUES (?, ?, ?)",
+                (session_id, reason, datetime.now(UTC).isoformat()),
+            )
+            conn.execute("COMMIT")
+        self._mirror({
+            "event": "paid_disabled",
+            "session_id": session_id,
+            "reason": reason,
+            "ts": datetime.now(UTC).isoformat(),
+        })
+
     def is_paid_disabled(self, session_id: str) -> bool:
         with _connect(self.path) as conn:
             return conn.execute(

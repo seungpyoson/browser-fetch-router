@@ -58,7 +58,7 @@
         "--confirm-irreversible": { "type": "string" },
         "--max-steps": { "type": "integer", "default": 10 },
         "--max-duration-sec": { "type": "integer", "default": 300 },
-        "--max-cost-usd": { "type": "number", "default": 0.05 }
+        "--max-cost-usd": { "type": "number", "default": 0.25 }
       }
     },
     "doctor": { "type": "object", "properties": { "--json": { "type": "boolean" } } },

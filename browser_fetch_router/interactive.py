@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import os
 import re
+from decimal import Decimal, InvalidOperation
+from math import isfinite
 from typing import Any
 
+from browser_fetch_router.cost import CostLedger
 from browser_fetch_router.env_allowlist import provider_env
+from browser_fetch_router.paths import state_dir
 from browser_fetch_router.schema import envelope
+from browser_fetch_router.session import current_session_id
+
+HOSTED_BROWSER_MIN_COST_USD = 0.25
 
 # Regex catalogues per action tier.
 TIER_C_PATTERNS = [
@@ -25,7 +32,7 @@ TIER_B_PATTERNS = [
 
 TIER_A_PATTERNS = [
     re.compile(r"\b(read|view|show|display|screenshot|capture|find|search|look\s+up|extract)\b", re.IGNORECASE),
-    re.compile(r"\b(navigate|go\s+to|visit|open\s+page|browse)\b", re.IGNORECASE),
+    re.compile(r"\b(navigate|go\s+to|visit|open\s+(?:page|https?://|www\.|site|website|url|link)|browse)\b", re.IGNORECASE),
 ]
 
 
@@ -139,6 +146,111 @@ def _provider_unavailable(provider: str, tier: str, **evidence: Any) -> dict[str
     )
 
 
+def _cost_cap_exceeded(
+    *,
+    provider: str,
+    session_id: str,
+    max_cost_usd: float,
+    reason: str,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return envelope(
+        command="interactive-browser",
+        status="cost_cap_exceeded",
+        provider=provider,
+        error={
+            "code": "cost_cap_exceeded",
+            "message": "Hosted browser cost cap reached; paid calls are disabled for this session.",
+        },
+        evidence={
+            "provider": provider,
+            "session_id": session_id,
+            "max_cost_usd": max_cost_usd,
+            "reason": reason,
+            **(evidence or {}),
+        },
+    )
+
+
+def _hosted_cost_cap(value: float) -> float | None:
+    if not isfinite(value) or value < 0:
+        return None
+    return max(HOSTED_BROWSER_MIN_COST_USD, float(value))
+
+
+def _reserve_hosted_cost(
+    ledger: CostLedger,
+    session_id: str,
+    provider: str,
+    amount: float,
+    *,
+    request_cap: float,
+) -> str | bool:
+    return ledger.reserve(
+        session_id,
+        provider,
+        amount,
+        request_cap=request_cap,
+        session_cap=ledger.session_total(session_id) + amount,
+        daily_cap=ledger.daily_total() + amount,
+    )
+
+
+def _reported_cost(evidence: Any) -> Decimal | None:
+    if not isinstance(evidence, dict):
+        return None
+    raw = evidence.get("total_cost_usd")
+    if raw is None:
+        return None
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, ValueError):
+        return None
+    if not value.is_finite() or value < 0:
+        return None
+    return value
+
+
+def _provider_result_envelope(result: dict[str, Any]) -> dict[str, Any]:
+    return envelope(
+        command="interactive-browser",
+        status=result.get("status", "provider_unavailable"),
+        route="interactive-browser",
+        provider=result.get("provider"),
+        content_markdown=result.get("content_markdown"),
+        evidence=result.get("evidence"),
+        error=result.get("error"),
+    )
+
+
+def _record_reported_hosted_cost(
+    *,
+    ledger: CostLedger,
+    reservation: str | bool,
+    session_id: str,
+    provider: str,
+    reported_cost: Decimal,
+    cost_cap: float,
+) -> dict[str, Any] | None:
+    ledger.release(reservation)
+    recorded = _reserve_hosted_cost(
+        ledger,
+        session_id,
+        provider,
+        float(reported_cost),
+        request_cap=cost_cap,
+    )
+    if recorded:
+        return None
+    ledger.disable_session(session_id, "cost_record_failed")
+    return _cost_cap_exceeded(
+        provider=provider,
+        session_id=session_id,
+        max_cost_usd=cost_cap,
+        reason="cost_record_failed",
+    )
+
+
 def run_interactive_browser(
     task: str,
     *,
@@ -147,7 +259,7 @@ def run_interactive_browser(
     confirm_irreversible: str | None = None,
     max_steps: int = 10,
     max_duration_sec: int = 300,
-    max_cost_usd: float = 0.05,
+    max_cost_usd: float = HOSTED_BROWSER_MIN_COST_USD,
 ) -> dict[str, Any]:
     """Dispatch an interactive browser task.
 
@@ -212,17 +324,87 @@ def run_interactive_browser(
 
     if selected == "cloud":
         env = provider_env({"BROWSER_USE_API_KEY"})
-        if "BROWSER_USE_API_KEY" not in env:
+        api_key = env.get("BROWSER_USE_API_KEY")
+        if not api_key:
             return envelope(
                 command="interactive-browser",
                 status="quota_or_key_missing",
                 error={"code": "browser_use_cloud_key_missing"},
             )
-        return _provider_unavailable(
-            selected,
-            tier,
-            credentials_present=True,
+        cost_cap = _hosted_cost_cap(max_cost_usd)
+        if cost_cap is None:
+            return envelope(
+                command="interactive-browser",
+                status="usage_error",
+                error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
+            )
+        session_id = current_session_id()
+        ledger = CostLedger(state_dir() / "cost.db")
+        reservation = _reserve_hosted_cost(
+            ledger,
+            session_id,
+            "browser-use-cloud",
+            cost_cap,
+            request_cap=cost_cap,
         )
+        if not reservation:
+            return _cost_cap_exceeded(
+                provider="browser-use-cloud",
+                session_id=session_id,
+                max_cost_usd=cost_cap,
+                reason="paid_session_disabled_or_cap_exceeded",
+            )
+
+        from browser_fetch_router.providers import browser_use_cloud
+
+        result = browser_use_cloud.run_task(
+            task=task,
+            api_key=api_key,
+            max_steps=max_steps,
+            max_duration_sec=max_duration_sec,
+            max_cost_usd=cost_cap,
+        )
+        reported_cost = _reported_cost(result.get("evidence"))
+        if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
+            ledger.release(reservation)
+            ledger.disable_session(session_id, "provider_overrun")
+            return _cost_cap_exceeded(
+                provider="browser-use-cloud",
+                session_id=session_id,
+                max_cost_usd=cost_cap,
+                reason="provider_reported_overrun",
+                evidence={
+                    "reported_total_cost_usd": str(reported_cost),
+                    "provider_evidence": result.get("evidence"),
+                },
+            )
+        if result.get("status") != "ok":
+            if reported_cost is not None:
+                cost_error = _record_reported_hosted_cost(
+                    ledger=ledger,
+                    reservation=reservation,
+                    session_id=session_id,
+                    provider="browser-use-cloud",
+                    reported_cost=reported_cost,
+                    cost_cap=cost_cap,
+                )
+                if cost_error:
+                    return cost_error
+            else:
+                ledger.release(reservation)
+            return _provider_result_envelope(result)
+        if reported_cost is not None:
+            cost_error = _record_reported_hosted_cost(
+                ledger=ledger,
+                reservation=reservation,
+                session_id=session_id,
+                provider="browser-use-cloud",
+                reported_cost=reported_cost,
+                cost_cap=cost_cap,
+            )
+            if cost_error:
+                return cost_error
+        return _provider_result_envelope(result)
 
     return envelope(
         command="interactive-browser",

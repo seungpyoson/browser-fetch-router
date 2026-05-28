@@ -71,6 +71,17 @@ def test_session_cap_lockout_persists(tmp_path):
     )
 
 
+def test_disable_session_blocks_future_reservations(tmp_path):
+    ledger = CostLedger(tmp_path / "cost.sqlite3")
+
+    ledger.disable_session("s1", "provider_overrun")
+
+    assert ledger.is_paid_disabled("s1")
+    assert not ledger.reserve(
+        "s1", "browser-use-cloud", 0.01, request_cap=0.25, session_cap=1.0, daily_cap=10.0
+    )
+
+
 # --- Task 12: token bucket + circuit breaker -------------------------------
 
 

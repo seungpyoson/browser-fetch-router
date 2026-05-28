@@ -183,3 +183,15 @@ def test_dispatcher_handler_returning_envelope_uses_status_exit_code():
     with contextlib.redirect_stdout(buf):
         exit_code = cli._emit("read-web", handler=handler)
     assert exit_code == 5
+
+
+def test_interactive_browser_default_cost_cap_matches_schema():
+    from browser_fetch_router import cli
+    from browser_fetch_router.schema import schema_payload
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["interactive-browser", "open page https://example.com"])
+    interactive_schema = schema_payload()["output_schema"]["commandFlags"]["interactive-browser"]
+
+    assert args.max_cost_usd == 0.25
+    assert interactive_schema["properties"]["--max-cost-usd"]["default"] == 0.25

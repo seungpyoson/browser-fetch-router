@@ -321,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
     browser.add_argument("--confirm-irreversible")
     browser.add_argument("--max-steps", type=int, default=10)
     browser.add_argument("--max-duration-sec", type=int, default=300)
-    browser.add_argument("--max-cost-usd", type=float, default=0.05)
+    browser.add_argument("--max-cost-usd", type=float, default=0.25)
 
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
