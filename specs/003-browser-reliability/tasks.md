@@ -129,7 +129,7 @@
 - [x] T036 [US4] Run a credentialed Browser Use Cloud smoke and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
 - [x] T049 [US4] Implement Browserbase-backed Stagehand execution, cleanup, error mapping, and hosted-cost guarding in `browser_fetch_router/interactive.py` and `browser_fetch_router/providers/browserbase_stagehand.py`
 - [x] T050 [US4] Remove local from daily-use provider choices until it has a credential-safe live path in `browser_fetch_router/cli.py`, schema, README, docs, and adapters
-- [ ] T051 [US4] Run a credentialed Browserbase smoke through the shared key registry and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
+- [x] T051 [US4] Run a credentialed Browserbase smoke through the shared key registry and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 4 is independently testable through schema/help and provider-specific CLI smokes.
 

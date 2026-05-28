@@ -137,4 +137,4 @@ global command is stale, the verifier returns `stale_global_install` with a
 - Live Reddit listing smoke -> `status: ok`, `provider: reddit-json`
 - Current-package managed CDP smoke -> `read-user-tabs setup --launch` waited for loopback CDP readiness, `list --show-all` returned the Example Domain tab, `read active` returned Example Domain content, and the temporary Chrome/profile were removed afterward
 - Current-package Browser Use Cloud live smoke -> `status: ok`, `provider: browser-use-cloud`, content contained `"Example Domain"`, `remote_status: stopped`, `step_count: 0`, and `total_cost_usd: 0.004490000000000000067446048746`
-- Browserbase live smoke -> blocked because the shared key registry/cache has no `BROWSERBASE_API_KEY` entry yet; `BROWSERBASE_PROJECT_ID` is supported as optional account config when present
+- Current-package Browserbase live smoke -> registry-backed `BROWSERBASE_API_KEY`, `status: ok`, `provider: browserbase`, content contained `"Example Domain"`, `completed: true`, `success: true`, `action_count: 3`, model `google/gemini-2.5-flash`; `BROWSERBASE_PROJECT_ID` remains supported as optional account config when present
