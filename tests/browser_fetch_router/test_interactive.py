@@ -135,6 +135,41 @@ def test_cloud_after_opt_in_dispatches_browser_use_cloud_with_cost_guard(tmp_pat
     assert ledger.session_total("bfr-cloud-ok") == 0.18
 
 
+def test_cloud_success_without_reported_cost_releases_reservation(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        return {
+            "status": "ok",
+            "provider": "browser-use-cloud",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "remote-no-cost",
+                "remote_status": "stopped",
+                "step_count": 1,
+            },
+        }
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-no-cost")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "ok"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-no-cost") == 0.0
+
+
 def test_cloud_provider_overrun_returns_cost_cap_and_disables_session(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
     from browser_fetch_router.cost import CostLedger

@@ -50,6 +50,13 @@
 - Implement every provider immediately: allowed by spec, but only if it can be verified end to end with credentials/dependencies.
 - Mark unavailable providers clearly until implemented: chosen as the minimum truthful path.
 
+**Reviewer follow-up evidence**:
+
+- Gemini review found a real reservation leak: Browser Use Cloud success without `total_cost_usd` returned `ok` while leaving the preflight cost reservation in the session ledger.
+- Red TDD test `test_cloud_success_without_reported_cost_releases_reservation` reproduced the leak with `ledger.session_total("bfr-cloud-no-cost") == 0.25` after an `ok` provider result with no reported cost.
+- The fix releases the reservation on the successful no-reported-cost branch, matching the existing failure no-reported-cost behavior.
+- `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `36 passed`.
+
 ## Decision: Add explicit global install freshness verification
 
 **Rationale**: Branch/temp-venv verification can pass while the actual global shim points to a stale pipx environment. Live smoke must prove the real `command -v browser-fetch-router` target, schema defaults, adapter files, and branch expectation agree.

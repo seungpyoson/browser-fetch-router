@@ -404,6 +404,8 @@ def run_interactive_browser(
             )
             if cost_error:
                 return cost_error
+        else:
+            ledger.release(reservation)
         return _provider_result_envelope(result)
 
     return envelope(
