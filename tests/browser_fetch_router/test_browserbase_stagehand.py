@@ -15,6 +15,13 @@ class _OpaqueUsage:
         return "<OpaqueUsage tokens=unknown>"
 
 
+class _CircularUsage:
+    def to_dict(self):
+        data = {}
+        data["self"] = data
+        return data
+
+
 class _Result:
     def __init__(self, *, success=True, message="Page title: Example Domain"):
         self.message = message
@@ -183,6 +190,43 @@ def test_browserbase_stagehand_usage_evidence_is_json_safe(monkeypatch):
 
     assert result["status"] == "ok"
     assert result["evidence"]["usage"] == "<OpaqueUsage tokens=unknown>"
+
+
+def test_browserbase_stagehand_usage_evidence_handles_json_value_error(monkeypatch):
+    from browser_fetch_router.providers import browserbase_stagehand
+
+    class CircularUsageResult(_Result):
+        def __init__(self):
+            super().__init__()
+            self.usage = _CircularUsage()
+
+    class CircularUsageSession(_FakeSession):
+        async def execute(self, **kwargs):
+            self._events.append(("execute", kwargs))
+            return _Response(CircularUsageResult())
+
+    class TrackingStagehand(_FakeStagehand):
+        async def start(self, **kwargs):
+            self.events.append(("start", kwargs))
+            return CircularUsageSession(self.events, _Result())
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        types.SimpleNamespace(AsyncStagehand=TrackingStagehand),
+    )
+
+    result = browserbase_stagehand.run_task(
+        "Open https://example.com and report the page title",
+        api_key="bb_secret",
+        project_id=None,
+        model_name="google/gemini-2.5-flash",
+        max_steps=3,
+        max_duration_sec=30,
+    )
+
+    assert result["status"] == "ok"
+    assert result["evidence"]["usage"] == "{'self': {...}}"
 
 
 def test_browserbase_stagehand_failed_task_still_ends_session(monkeypatch):

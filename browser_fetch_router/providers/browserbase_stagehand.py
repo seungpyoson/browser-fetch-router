@@ -148,7 +148,7 @@ def _code_for_exception(exc: BaseException) -> str:
 def _json_safe(value: Any) -> Any:
     try:
         json.dumps(value)
-    except TypeError:
+    except (TypeError, ValueError):
         return repr(value)
     return value
 
