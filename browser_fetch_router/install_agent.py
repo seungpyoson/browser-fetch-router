@@ -127,6 +127,27 @@ def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
     return INSTALL_CONTRACTS[agent].destination()
 
 
+def _default_skip_entry(agent: str, contract: AgentInstallContract) -> dict[str, Any]:
+    return {
+        "agent": agent,
+        "status": "skipped",
+        "artifacts": [],
+        "skip_reason": contract.default_skip_reason,
+    }
+
+
+def _install_result_entry(agent: str, result: dict[str, Any]) -> dict[str, Any]:
+    entry = {
+        "agent": agent,
+        "status": result.get("status"),
+        "artifacts": result.get("artifacts") or [],
+    }
+    for key in ("error", "evidence", "warnings"):
+        if result.get(key):
+            entry[key] = result[key]
+    return entry
+
+
 def install_agents(
     agents: list[str],
     *,
@@ -155,29 +176,14 @@ def install_agents(
     for agent in agents:
         contract = INSTALL_CONTRACTS[agent]
         if default_mode and not contract.default_enabled:
-            results.append({
-                "agent": agent,
-                "status": "skipped",
-                "artifacts": [],
-                "skip_reason": contract.default_skip_reason,
-            })
+            results.append(_default_skip_entry(agent, contract))
             continue
         result = install_agent(
             agent,
             force=force,
             verification_runner=shared_verification_runner,
         )
-        entry = {
-            "agent": agent,
-            "status": result.get("status"),
-            "artifacts": result.get("artifacts") or [],
-        }
-        if result.get("error"):
-            entry["error"] = result["error"]
-        if result.get("evidence"):
-            entry["evidence"] = result["evidence"]
-        if result.get("warnings"):
-            entry["warnings"] = result["warnings"]
+        entry = _install_result_entry(agent, result)
         if result.get("status") not in {"ok", "skipped"}:
             all_ok = False
         results.append(entry)

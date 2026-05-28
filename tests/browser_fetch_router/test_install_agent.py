@@ -5,6 +5,10 @@ from pathlib import Path
 from browser_fetch_router.install_agent import adapter_text, destination_for
 
 
+def _fail_verification() -> None:
+    raise AssertionError("verification should not run")
+
+
 def test_claude_destination(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     dest = destination_for("claude")
@@ -53,11 +57,7 @@ def test_install_agents_unknown_agent_returns_usage_error_without_side_effects(
 
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
     module.destination_for("codex").parent.parent.mkdir(parents=True)
-    monkeypatch.setattr(
-        module,
-        "_run_verification",
-        lambda: (_ for _ in ()).throw(AssertionError("verification should not run")),
-    )
+    monkeypatch.setattr(module, "_run_verification", _fail_verification)
 
     result = module.install_agents(["codex", "unknown-agent"], force=True)
 
@@ -95,13 +95,15 @@ def test_install_plan_verifies_help_and_doctor():
     assert ["browser-fetch-router", "schema", "--json"] in commands
 
 
-def test_safe_env_for_subprocess_drops_agent_keys(monkeypatch):
+def test_safe_env_for_subprocess_drops_agent_keys(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret-anthropic")
     monkeypatch.setenv("OPENAI_API_KEY", "secret-openai")
     monkeypatch.setenv("GEMINI_API_KEY", "secret-gemini")
     monkeypatch.setenv("KIMI_API_KEY", "secret-kimi")
-    monkeypatch.setenv("HOME", "/tmp/x")
-    monkeypatch.setenv("PATH", "/tmp/bin")
+    home = tmp_path / "home"
+    bin_dir = tmp_path / "bin"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", str(bin_dir))
     from browser_fetch_router.install_agent import _safe_env
 
     env = _safe_env()
@@ -109,15 +111,18 @@ def test_safe_env_for_subprocess_drops_agent_keys(monkeypatch):
     assert "OPENAI_API_KEY" not in env
     assert "GEMINI_API_KEY" not in env
     assert "KIMI_API_KEY" not in env
-    assert env.get("HOME") == "/tmp/x"
-    assert env.get("PATH") == "/tmp/bin"
+    assert env.get("HOME") == str(home)
+    assert env.get("PATH") == str(bin_dir)
 
 
-def test_run_verification_passes_sanitized_env_to_subprocess(monkeypatch):
+def test_run_verification_passes_sanitized_env_to_subprocess(tmp_path, monkeypatch):
     from browser_fetch_router import install_agent as module
 
     captured_envs = []
-    safe_env = {"HOME": "/tmp/safe-home", "PATH": "/tmp/safe-bin"}
+    safe_env = {
+        "HOME": str(tmp_path / "safe-home"),
+        "PATH": str(tmp_path / "safe-bin"),
+    }
     monkeypatch.setattr(module, "_safe_env", lambda: safe_env)
 
     class Completed:
@@ -309,18 +314,13 @@ def test_install_agents_does_not_duplicate_results_under_evidence(
 def test_install_agent_write_failure_returns_tool_setup_failed(tmp_path, monkeypatch):
     from browser_fetch_router import install_agent as module
 
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
     module.destination_for("codex").parent.parent.mkdir(parents=True)
-    monkeypatch.setattr(
-        module,
-        "atomic_write_bytes",
-        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
-    )
-    monkeypatch.setattr(
-        module,
-        "_run_verification",
-        lambda: (_ for _ in ()).throw(AssertionError("verification should not run")),
-    )
+    monkeypatch.setattr(module, "atomic_write_bytes", fail_write)
+    monkeypatch.setattr(module, "_run_verification", _fail_verification)
 
     result = module.install_agent("codex", force=True)
 
@@ -568,21 +568,18 @@ def test_install_agents_partial_failure_continues(tmp_path, monkeypatch):
     assert result["results"][1]["status"] == "tool_setup_failed"
 
 
-def test_install_agent_all_rejects_adapter_path(capsys, tmp_path):
+def test_install_agent_all_rejects_adapter_path(capsys, tmp_path, monkeypatch):
     from browser_fetch_router import cli
     from browser_fetch_router.status import STATUS_EXIT_CODES
 
-    rc = None
-    try:
-        rc = cli.main([
-            "install-agent",
-            "--all",
-            "--adapter-path",
-            str(tmp_path / "SKILL.md"),
-            "--json",
-        ])
-    except SystemExit as exc:
-        rc = exc.code
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = cli.main([
+        "install-agent",
+        "--all",
+        "--adapter-path",
+        str(tmp_path / "SKILL.md"),
+        "--json",
+    ])
 
     assert rc == STATUS_EXIT_CODES["usage_error"]
     payload = json.loads(capsys.readouterr().out)
@@ -590,22 +587,19 @@ def test_install_agent_all_rejects_adapter_path(capsys, tmp_path):
     assert payload["error"]["code"] == "usage_error"
 
 
-def test_install_agent_select_rejects_adapter_path(capsys, tmp_path):
+def test_install_agent_select_rejects_adapter_path(capsys, tmp_path, monkeypatch):
     from browser_fetch_router import cli
     from browser_fetch_router.status import STATUS_EXIT_CODES
 
-    rc = None
-    try:
-        rc = cli.main([
-            "install-agent",
-            "--select",
-            "claude,codex",
-            "--adapter-path",
-            str(tmp_path / "SKILL.md"),
-            "--json",
-        ])
-    except SystemExit as exc:
-        rc = exc.code
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = cli.main([
+        "install-agent",
+        "--select",
+        "claude,codex",
+        "--adapter-path",
+        str(tmp_path / "SKILL.md"),
+        "--json",
+    ])
 
     assert rc == STATUS_EXIT_CODES["usage_error"]
     payload = json.loads(capsys.readouterr().out)
@@ -613,11 +607,12 @@ def test_install_agent_select_rejects_adapter_path(capsys, tmp_path):
     assert "--adapter-path cannot be combined" in payload["error"]["message"]
 
 
-def test_install_agent_select_cli_groups_requested_agents(capsys, monkeypatch):
+def test_install_agent_select_cli_groups_requested_agents(capsys, tmp_path, monkeypatch):
     from browser_fetch_router import cli
     from browser_fetch_router.schema import envelope
 
     captured = {}
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     def fake_install_agents(agents, *, force=False, default_mode=False):
         captured["agents"] = agents
