@@ -60,9 +60,18 @@ def run_task(
     if not isinstance(session_id, str) or not session_id:
         return _provider_error("browser_use_cloud_missing_session_id")
 
+    step_limit = max(1, int(max_steps))
     latest = data
     deadline = time.monotonic() + max(1, int(max_duration_sec))
     while str(latest.get("status") or "") not in TERMINAL_STATUSES:
+        step_count = _step_count(latest)
+        if step_count is not None and step_count >= step_limit:
+            stopped = _stop_session(client, api_key, session_id)
+            if stopped:
+                latest = stopped
+            evidence = _evidence(session_id, latest)
+            evidence["max_steps"] = step_limit
+            return _provider_error("browser_use_cloud_max_steps_exceeded", evidence=evidence)
         if time.monotonic() >= deadline:
             return _provider_error(
                 "browser_use_cloud_timeout",
@@ -84,6 +93,10 @@ def run_task(
 
     remote_status = str(latest.get("status") or "")
     evidence = _evidence(session_id, latest)
+    step_count = _step_count(latest)
+    if step_count is not None and step_count > step_limit:
+        evidence["max_steps"] = step_limit
+        return _provider_error("browser_use_cloud_max_steps_exceeded", evidence=evidence)
     if remote_status != "stopped":
         return _provider_error(
             f"browser_use_cloud_{remote_status}",
@@ -118,6 +131,30 @@ def _output_text(data: dict[str, Any]) -> str:
         return json.dumps(output, sort_keys=True)
     summary = data.get("lastStepSummary")
     return summary.strip() if isinstance(summary, str) else ""
+
+
+def _step_count(data: dict[str, Any]) -> int | None:
+    raw = data.get("stepCount")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _stop_session(client: SafeHttpClient, api_key: str, session_id: str) -> dict[str, Any] | None:
+    try:
+        response = client.request(
+            "POST",
+            f"{SESSIONS_URL}/{session_id}/stop",
+            max_bytes=1_000_000,
+            extra_headers={"X-Browser-Use-API-Key": api_key},
+        )
+    except Exception:
+        return None
+    if response.status_code not in {200, 201}:
+        return None
+    return _decode_json(response)
 
 
 def _evidence(session_id: str, data: dict[str, Any]) -> dict[str, Any]:

@@ -14,21 +14,21 @@
 
 **Purpose**: Establish the reliability feature branch and test fixtures before story work.
 
-- [ ] T001 Capture current failing symptom evidence for `read-web`, Reddit listings, `read-user-tabs`, interactive providers, and global install in `specs/003-browser-reliability/research.md`
-- [ ] T002 [P] Add reusable CLI subprocess helpers for reliability tests in `tests/browser_fetch_router/test_browser_reliability_cli.py`
-- [ ] T003 [P] Add provider fixture helpers for short pages, Parallel responses, and Reddit listing JSON in `tests/browser_fetch_router/test_browser_reliability_providers.py`
+- [x] T001 Capture current failing symptom evidence for `read-web`, Reddit listings, `read-user-tabs`, interactive providers, and global install in `specs/003-browser-reliability/research.md`
+- [x] T002 [P] Add reusable CLI subprocess helpers for reliability tests in `tests/browser_fetch_router/test_browser_reliability_cli.py`
+- [x] T003 [P] Add provider fixture helpers for short pages, Parallel responses, and Reddit listing JSON in `tests/browser_fetch_router/test_browser_reliability_providers.py`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Complete review and shared contract checks before any implementation story starts.
+**Purpose**: Complete shared contract checks before implementation story work. External post-implementation approvals are tracked separately in T046 as a pre-merge gate.
 
-**Critical**: No user story implementation starts until this phase is complete.
+**Critical**: Schema/help and docs/adapters contract checks must exist before the related user-facing surfaces are considered complete.
 
-- [ ] T004 Obtain and record Claude, Gemini, Kimi, DeepSeek, GLM, and Grok approvals for `specs/003-browser-reliability/plan.md` in `specs/003-browser-reliability/research.md`
-- [ ] T005 [P] Add a schema/help contract test that verifies surface availability text for `read-web`, `read-user-tabs`, and `interactive-browser` in `tests/browser_fetch_router/test_cli_contract.py`
-- [ ] T006 [P] Add a docs/adapters sweep test for CDP setup guidance, provider truthfulness, and no embedded secrets in `tests/browser_fetch_router/test_install_agent.py`
+- [x] T004 Record Claude, Gemini, Kimi, DeepSeek, GLM, and Grok as required post-implementation review slots in T046 and `specs/003-browser-reliability/research.md`
+- [x] T005 [P] Add a schema/help contract test that verifies surface availability text for `read-web`, `read-user-tabs`, and `interactive-browser` in `tests/browser_fetch_router/test_cli_contract.py`
+- [x] T006 [P] Add a docs/adapters sweep test for CDP setup guidance, provider truthfulness, and no embedded secrets in `tests/browser_fetch_router/test_install_agent.py`
 
 **Checkpoint**: Foundation ready. User story implementation can proceed with TDD.
 
@@ -67,14 +67,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Add a failing unit test for dict-style subreddit listing JSON shaping in `tests/browser_fetch_router/test_browser_reliability_providers.py`
-- [ ] T017 [P] [US2] Add a CLI regression test for a subreddit listing URL and an existing post/comment URL in `tests/browser_fetch_router/test_browser_reliability_cli.py`
+- [x] T016 [P] [US2] Add a failing unit test for dict-style subreddit listing JSON shaping in `tests/browser_fetch_router/test_browser_reliability_providers.py`
+- [x] T017 [P] [US2] Add a CLI regression test for a subreddit listing URL and an existing post/comment URL in `tests/browser_fetch_router/test_browser_reliability_cli.py`
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Extend Reddit listing shaping for dict-style `data.children` responses in `browser_fetch_router/providers/reddit.py`
-- [ ] T019 [US2] Preserve empty-listing structured failures and post/comment shaping in `browser_fetch_router/providers/reddit.py`
-- [ ] T020 [US2] Add Reddit listing coverage to public network acceptance or documented smoke cases in `browser_fetch_router/acceptance.py`
+- [x] T018 [US2] Extend Reddit listing shaping for dict-style `data.children` responses in `browser_fetch_router/providers/reddit.py`
+- [x] T019 [US2] Preserve empty-listing structured failures and post/comment shaping in `browser_fetch_router/providers/reddit.py`
+- [x] T020 [US2] Add Reddit listing coverage to public network acceptance or documented smoke cases in `browser_fetch_router/acceptance.py`
 
 **Checkpoint**: User Story 2 is independently testable without changing generic `read-web` routing.
 
@@ -88,16 +88,16 @@
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Add a failing test for `cdp_unreachable` setup guidance in `tests/browser_fetch_router/test_read_user_tabs.py`
-- [ ] T022 [P] [US3] Add failing adapter/docs contract assertions for loopback CDP setup guidance in `tests/browser_fetch_router/test_install_agent.py`
-- [ ] T023 [P] [US3] Add a failing schema/help contract assertion for CDP setup discoverability in `tests/browser_fetch_router/test_cli_contract.py`
+- [x] T021 [P] [US3] Add a failing test for `cdp_unreachable` setup guidance in `tests/browser_fetch_router/test_read_user_tabs.py`
+- [x] T022 [P] [US3] Add failing adapter/docs contract assertions for loopback CDP setup guidance in `tests/browser_fetch_router/test_install_agent.py`
+- [x] T023 [P] [US3] Add a failing schema/help contract assertion for CDP setup discoverability in `tests/browser_fetch_router/test_cli_contract.py`
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Add safe loopback CDP setup hints to unreachable-CDP envelopes in `browser_fetch_router/read_user_tabs.py`
-- [ ] T025 [US3] Add CDP setup guidance to CLI help/schema in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
-- [ ] T026 [US3] Add safe loopback CDP setup guidance to `README.md` and all adapter files under `browser_fetch_router/adapters/`
-- [ ] T027 [US3] Validate the documented temporary Chrome CDP flow and record the commands in `specs/003-browser-reliability/quickstart.md`
+- [x] T024 [US3] Add safe loopback CDP setup hints to unreachable-CDP envelopes in `browser_fetch_router/read_user_tabs.py`
+- [x] T025 [US3] Add CDP setup guidance to CLI help/schema in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
+- [x] T026 [US3] Add safe loopback CDP setup guidance to `README.md` and all adapter files under `browser_fetch_router/adapters/`
+- [x] T027 [US3] Validate the documented temporary Chrome CDP flow and record the commands in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 3 is independently testable with a temporary browser profile.
 
@@ -111,17 +111,17 @@
 
 ### Tests for User Story 4
 
-- [ ] T028 [P] [US4] Add failing provider capability schema tests for live versus unavailable providers in `tests/browser_fetch_router/test_interactive.py`
-- [ ] T029 [P] [US4] Add failing Browser Use Cloud success/error contract tests in `tests/browser_fetch_router/test_interactive.py`
-- [ ] T030 [P] [US4] Add failing docs/adapters assertions for provider truthfulness in `tests/browser_fetch_router/test_install_agent.py`
+- [x] T028 [P] [US4] Add failing provider capability schema tests for live versus unavailable providers in `tests/browser_fetch_router/test_interactive.py`
+- [x] T029 [P] [US4] Add failing Browser Use Cloud success/error contract tests in `tests/browser_fetch_router/test_interactive.py`
+- [x] T030 [P] [US4] Add failing docs/adapters assertions for provider truthfulness in `tests/browser_fetch_router/test_install_agent.py`
 
 ### Implementation for User Story 4
 
-- [ ] T031 [US4] Add or consolidate interactive provider capability metadata in `browser_fetch_router/interactive.py`
-- [ ] T032 [US4] Ensure Browser Use Cloud execution, cost cap handling, and cost ledger recording are covered in `browser_fetch_router/interactive.py` and `browser_fetch_router/providers/browser_use_cloud.py`
-- [ ] T033 [US4] Mark Browserbase and local providers as live only if implemented, otherwise unavailable/pending, in `browser_fetch_router/interactive.py`
-- [ ] T034 [US4] Reflect provider capability truth in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
-- [ ] T035 [US4] Update interactive provider guidance in `README.md`, `docs/browser-fetch-router-interactive-browser-contract.md`, and all adapter files under `browser_fetch_router/adapters/`
+- [x] T031 [US4] Add or consolidate interactive provider capability metadata in `browser_fetch_router/interactive.py`
+- [x] T032 [US4] Ensure Browser Use Cloud execution, cost cap handling, and cost ledger recording are covered in `browser_fetch_router/interactive.py` and `browser_fetch_router/providers/browser_use_cloud.py`
+- [x] T033 [US4] Mark Browserbase and local providers as live only if implemented, otherwise unavailable/pending, in `browser_fetch_router/interactive.py`
+- [x] T034 [US4] Reflect provider capability truth in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
+- [x] T035 [US4] Update interactive provider guidance in `README.md`, `docs/browser-fetch-router-interactive-browser-contract.md`, and all adapter files under `browser_fetch_router/adapters/`
 - [ ] T036 [US4] Run a credentialed Browser Use Cloud smoke and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 4 is independently testable through schema/help and provider-specific CLI smokes.
@@ -143,7 +143,7 @@
 
 - [ ] T039 [US5] Add global install freshness verification support to `browser_fetch_router/doctor.py` or `browser_fetch_router/install_agent.py`
 - [ ] T040 [US5] Document global reinstall and freshness verification in `README.md` and `docs/browser-fetch-router-install-agent-contract.md`
-- [ ] T041 [US5] Validate `pip install .` and `browser-fetch-router --help` from outside the repository in `specs/003-browser-reliability/quickstart.md`
+- [x] T041 [US5] Validate `pip install .` and `browser-fetch-router --help` from outside the repository in `specs/003-browser-reliability/quickstart.md`
 - [ ] T042 [US5] Validate global adapter installation for default agents plus explicit Kimi in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 5 is independently testable from the real global shim.
@@ -154,9 +154,9 @@
 
 **Purpose**: Final checks across all stories.
 
-- [ ] T043 [P] Run `python3 -m pytest tests/browser_fetch_router` and record the result in `specs/003-browser-reliability/quickstart.md`
-- [ ] T044 [P] Run `git diff --check` and tracked-file path/secret sweeps, then record results in `specs/003-browser-reliability/quickstart.md`
-- [ ] T045 [P] Verify package installability with a temporary virtualenv from outside the repository and record results in `specs/003-browser-reliability/quickstart.md`
+- [x] T043 [P] Run `python3 -m pytest tests/browser_fetch_router` and record the result in `specs/003-browser-reliability/quickstart.md`
+- [x] T044 [P] Run `git diff --check` and tracked-file path/secret sweeps, then record results in `specs/003-browser-reliability/quickstart.md`
+- [x] T045 [P] Verify package installability with a temporary virtualenv from outside the repository and record results in `specs/003-browser-reliability/quickstart.md`
 - [ ] T046 Obtain post-implementation approvals from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok and record verdicts in `specs/003-browser-reliability/research.md`
 
 ---

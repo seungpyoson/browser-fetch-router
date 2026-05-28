@@ -696,6 +696,36 @@ def test_install_agent_schema_documents_default_and_supported_distinction():
     assert "SKILL.md" in install_schema["properties"]["--adapter-path"]["description"]
 
 
+def test_docs_and_adapters_expose_cdp_setup_without_embedded_secrets():
+    repo = Path(__file__).resolve().parents[2]
+    adapter_paths = sorted((repo / "browser_fetch_router" / "adapters").glob("*/SKILL.md"))
+    doc_paths = [
+        repo / "README.md",
+        repo / "specs" / "003-browser-reliability" / "contracts" / "read-user-tabs-cli.md",
+    ]
+
+    for path in [*adapter_paths, *doc_paths]:
+        text = path.read_text()
+        normalized = " ".join(text.split())
+        assert "127.0.0.1:9222" in text, path
+        assert "--remote-debugging-port=9222" in text, path
+        assert "--user-data-dir=<temporary-profile>" in text, path
+        assert "Do not use the normal" in normalized or "do not use the normal" in normalized, path
+        assert "sk-" not in text, path
+        assert "BROWSER_USE_API_KEY=" not in text, path
+
+    provider_doc_paths = [
+        repo / "README.md",
+        repo / "docs" / "browser-fetch-router-interactive-browser-contract.md",
+    ]
+    for path in [*adapter_paths, *provider_doc_paths]:
+        text = path.read_text()
+        normalized = " ".join(text.split())
+        assert "provider cloud" in normalized and "live" in normalized, path
+        assert "browserbase" in normalized and "unavailable" in normalized, path
+        assert "local" in normalized and "unavailable" in normalized, path
+
+
 def test_install_agent_contract_docs_include_support_matrix_and_caveats():
     doc = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
         encoding="utf-8"

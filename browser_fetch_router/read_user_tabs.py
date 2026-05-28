@@ -47,6 +47,17 @@ _NON_HTTP_SCHEMES_TO_REDACT = frozenset({
     "about", "blob", "view-source", "ftp", "ws", "wss",
 })
 
+CDP_SETUP_GUIDANCE = {
+    "cdp_base": "http://127.0.0.1:9222",
+    "summary": "Start Chrome or Chromium with a temporary profile and loopback-only CDP.",
+    "required_flags": [
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=9222",
+        "--user-data-dir=<temporary-profile>",
+    ],
+    "warning": "Do not use the normal profile; use a temporary profile for browser-fetch-router CDP.",
+}
+
 
 @dataclass(frozen=True)
 class _ReadAuthorization:
@@ -117,6 +128,10 @@ def _tab_list_failure_envelope(
         "CDP tab list endpoint was unreachable.",
     )
     evidence = {"cdp_base": cdp_base} if cdp_base is not None else None
+    if code == "cdp_unreachable":
+        guidance = dict(CDP_SETUP_GUIDANCE)
+        guidance["cdp_base"] = cdp_base or CDP_SETUP_GUIDANCE["cdp_base"]
+        evidence = {**(evidence or {}), "setup": guidance}
     return envelope(
         command="read-user-tabs",
         status="tool_setup_failed",
@@ -165,6 +180,11 @@ def _cdp_failure_envelope(
     else:
         code = "cdp_screenshot_failed" if operation == "screenshot" else "cdp_text_extraction_failed"
         message = "CDP operation failed."
+    if code == "cdp_unreachable":
+        evidence = {
+            **(evidence or {}),
+            "setup": dict(CDP_SETUP_GUIDANCE),
+        }
     return envelope(
         command="read-user-tabs",
         status="tool_setup_failed",

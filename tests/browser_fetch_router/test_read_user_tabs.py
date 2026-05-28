@@ -69,6 +69,29 @@ def test_list_tabs_sanitizes_unknown_cdp_list_failure(monkeypatch, tmp_path):
     assert "cookie=secret" not in result["error"]["message"]
 
 
+def test_list_tabs_cdp_unreachable_includes_loopback_setup_guidance(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(rut, "cdp_base_url", lambda **_kw: "http://127.0.0.1:9222")
+
+    def fail(_base):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(rut, "fetch_tab_list", fail)
+
+    result = rut.list_tabs(session_id="sid-read-user-tabs")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_unreachable"
+    setup = result["evidence"]["setup"]
+    assert setup["cdp_base"] == "http://127.0.0.1:9222"
+    assert "--remote-debugging-address=127.0.0.1" in setup["required_flags"]
+    assert "--remote-debugging-port=9222" in setup["required_flags"]
+    assert "--user-data-dir=<temporary-profile>" in setup["required_flags"]
+    assert "normal profile" in setup["warning"]
+
+
 def test_read_tab_maps_unexpected_redirect_to_cdp_specific_code(monkeypatch, tmp_path):
     from browser_fetch_router import cdp
     from browser_fetch_router import read_user_tabs as rut

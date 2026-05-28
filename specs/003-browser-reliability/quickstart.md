@@ -35,12 +35,19 @@ Expected: paid fallback returns `status: ok` when eligible and records provider/
 Start a separate Chrome profile. Do not use the normal profile.
 
 ```bash
-mkdir -p /private/tmp/bfr-cdp-profile
+BFR_TMPDIR="${TMPDIR:-/tmp}"
+BFR_CDP_PROFILE="$(mktemp -d "${BFR_TMPDIR%/}/bfr-cdp-profile.XXXXXX")"
+BFR_SCREENSHOT="${BFR_TMPDIR%/}/bfr-active.png"
 
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+# macOS:
+export CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Linux:
+# export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+
+"$CHROME_BIN" \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port=9222 \
-  --user-data-dir=/private/tmp/bfr-cdp-profile \
+  --user-data-dir="$BFR_CDP_PROFILE" \
   --no-first-run \
   --no-default-browser-check \
   https://www.wikipedia.org
@@ -53,7 +60,7 @@ curl -sS http://127.0.0.1:9222/json/version
 browser-fetch-router read-user-tabs list --json
 browser-fetch-router read-user-tabs list --all --approval-scope exact:list-all-tabs --persist-approval --show-all --json
 browser-fetch-router read-user-tabs read active --approval-scope hostname:www.wikipedia.org --max-chars 1000 --json
-browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output /private/tmp/bfr-active.png --json
+browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output "$BFR_SCREENSHOT" --json
 ```
 
 Expected: all commands return `status: ok` after CDP is reachable and the needed approval scope is supplied.
@@ -69,11 +76,12 @@ BROWSER_USE_API_KEY=... browser-fetch-router interactive-browser \
   "Open https://example.com and report the page title" \
   --provider cloud \
   --allow-hosted-browser \
+  --max-steps 10 \
   --max-cost-usd 0.25 \
   --json
 ```
 
-Expected: `status: ok`, provider evidence, content containing the page title, and cost within cap.
+Expected: `status: ok`, provider evidence, content containing the page title, step count within cap, and cost within cap.
 
 Browserbase/local provider checks:
 
@@ -87,7 +95,7 @@ Expected: each provider is either live with an end-to-end run or consistently ma
 
 ## 6. Global Install Freshness
 
-Run outside the repository, for example from `/private/tmp`:
+Run outside the repository, for example from `${TMPDIR:-/tmp}`:
 
 ```bash
 command -v browser-fetch-router
@@ -98,3 +106,14 @@ browser-fetch-router read-web https://example.com --json --no-cache
 ```
 
 Expected: the global shim resolves to the reviewed package, schema defaults match the branch, doctor is `ok`, and the public smoke succeeds.
+
+## Latest Local Verification Evidence
+
+- `python3 -m pytest tests/browser_fetch_router -q` -> `738 passed`
+- `git diff --check` -> clean
+- Tracked-file contributor-path sweep -> no matches
+- Outside-repo temporary virtualenv install -> `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` passed
+- Registry-backed Parallel paid smoke -> `status: ok`, `provider: parallel`
+- Live Reddit listing smoke -> `status: ok`, `provider: reddit-json`
+- Live temporary-profile CDP smoke -> `/json/version`, `read-user-tabs list`, `list --all`, `read active`, and `screenshot active` all passed; the temporary Chrome instance was closed afterward
+- Browser Use Cloud live smoke -> pending until `BROWSER_USE_API_KEY` is available from the key registry

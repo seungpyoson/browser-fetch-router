@@ -2,6 +2,7 @@ import json
 
 from browser_fetch_router.providers import jina
 from browser_fetch_router.providers import parallel
+from browser_fetch_router.providers import reddit
 
 
 def _example_domain_jina_text() -> str:
@@ -198,6 +199,84 @@ def test_read_web_paid_fallback_uses_parallel_specific_default_timeout(monkeypat
     assert payload["status"] == "ok"
     assert payload["provider"] == "parallel"
     assert captured["timeout"] >= 60.0
+
+
+def test_reddit_dict_listing_shapes_subreddit_posts():
+    payload = {
+        "data": {
+            "children": [
+                {
+                    "data": {
+                        "title": "Python 3.14 release notes",
+                        "author": "releasebot",
+                        "subreddit": "python",
+                        "score": 314,
+                        "num_comments": 27,
+                        "permalink": "/r/Python/comments/abc/python_314_release_notes/",
+                        "selftext": "Highlights from the release.",
+                    }
+                },
+                {
+                    "data": {
+                        "title": "Packaging question",
+                        "author": "packager",
+                        "subreddit": "python",
+                        "score": 42,
+                        "num_comments": 8,
+                    }
+                },
+            ]
+        }
+    }
+    client = _TextClient(json.dumps(payload))
+
+    result = reddit.fetch("https://www.reddit.com/r/python/", {"http_client": client})
+
+    assert result["status"] == "ok"
+    assert result["title"] == "Python 3.14 release notes"
+    assert "# r/python" in result["content_markdown"]
+    assert "Python 3.14 release notes" in result["content_markdown"]
+    assert "u/releasebot" in result["content_markdown"]
+    assert "Highlights from the release." in result["content_markdown"]
+    assert "Packaging question" in result["content_markdown"]
+    assert client.requested == ["https://www.reddit.com/r/python.json?limit=3"]
+
+
+def test_reddit_post_comment_list_shape_still_works():
+    payload = [
+        {
+            "data": {
+                "children": [
+                    {
+                        "data": {
+                            "title": "Post title",
+                            "selftext": "Post body",
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "data": {
+                "children": [
+                    {"data": {"author": "alice", "body": "First comment"}},
+                    {"data": {"author": "bob", "body": "Second comment"}},
+                ]
+            }
+        },
+    ]
+    client = _TextClient(json.dumps(payload))
+
+    result = reddit.fetch(
+        "https://www.reddit.com/r/python/comments/abc/post_title/",
+        {"http_client": client},
+    )
+
+    assert result["status"] == "ok"
+    assert result["title"] == "Post title"
+    assert "# Post title" in result["content_markdown"]
+    assert "Post body" in result["content_markdown"]
+    assert "**alice**: First comment" in result["content_markdown"]
 
 
 def test_parallel_extract_uses_v1_api_shape_and_reads_excerpts(monkeypatch):

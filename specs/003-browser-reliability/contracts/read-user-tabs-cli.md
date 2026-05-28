@@ -22,8 +22,9 @@ The setup path must use:
 
 - `--remote-debugging-address=127.0.0.1`
 - `--remote-debugging-port=9222`
-- `--user-data-dir=<temporary profile>`
+- `--user-data-dir=<temporary-profile>`
 - No default instruction to expose a normal browser profile
+- Do not use the normal browser profile for CDP setup
 
 ## Approval Contract
 
@@ -38,5 +39,5 @@ curl -sS http://127.0.0.1:9222/json/version
 browser-fetch-router read-user-tabs list --json
 browser-fetch-router read-user-tabs list --all --approval-scope exact:list-all-tabs --persist-approval --show-all --json
 browser-fetch-router read-user-tabs read active --approval-scope hostname:www.wikipedia.org --max-chars 1000 --json
-browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output /private/tmp/bfr-active.png --json
+browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output "${TMPDIR:-/tmp}/bfr-active.png" --json
 ```

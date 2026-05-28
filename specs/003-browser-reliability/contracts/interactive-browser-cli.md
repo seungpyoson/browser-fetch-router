@@ -21,7 +21,9 @@ With `BROWSER_USE_API_KEY` present and hosted browser opt-in:
 - `provider`: `browser-use-cloud`
 - `content_markdown`: non-empty task result
 - `evidence.remote_status`: terminal remote status
+- `evidence.step_count`: provider-reported step count, no greater than `--max-steps`
 - `evidence.total_cost_usd`: provider-reported cost when available
+- Browser Use Cloud v3 does not expose a create-session `maxSteps` request field; the CLI enforces `--max-steps` by polling `stepCount` and stopping a nonterminal cloud session when the cap is reached.
 - Cost ledger records the actual reported cost or disables the session on overrun
 - The single `--max-cost-usd` value is applied as the request, session, and daily hosted-browser cap until separate knobs exist.
 
@@ -38,7 +40,7 @@ Stubs must not be represented as daily-use ready providers.
 ## Acceptance Commands
 
 ```bash
-BROWSER_USE_API_KEY=... browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider cloud --allow-hosted-browser --max-cost-usd 0.25 --json
+BROWSER_USE_API_KEY=... browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider cloud --allow-hosted-browser --max-steps 10 --max-cost-usd 0.25 --json
 browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider browserbase --allow-hosted-browser --json
 browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider local --json
 browser-fetch-router schema --json

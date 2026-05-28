@@ -19,6 +19,12 @@ Invoke the shared `browser-fetch-router` CLI for any web fetch, tab read, or int
 - `browser-fetch-router read-user-tabs read <url-or-tab-id> --json`
 - `browser-fetch-router interactive-browser "<task>" --json`
 
+## User Tab CDP Setup
+
+- `read-user-tabs` requires loopback Chrome CDP at `http://127.0.0.1:9222`.
+- Start Chrome/Chromium with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>`.
+- Do not use the normal browser profile for CDP.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -34,5 +40,6 @@ Invoke the shared `browser-fetch-router` CLI for any web fetch, tab read, or int
 
 ## Constraints
 
+- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `browserbase` and `local` are unavailable until live launch support exists.
 - Do not call Gemini's built-in `google_web_search` for arbitrary fetches when `browser-fetch-router` would route the same URL — the shared CLI gives you per-route quality gates and cost ledgering.
 - Never embed Gemini API keys in adapter scripts.

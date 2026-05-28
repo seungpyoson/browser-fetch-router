@@ -32,8 +32,10 @@ browser-fetch-router read-web https://example.com --json --no-cache
 Installability from the repository remains:
 
 ```bash
-python3 -m venv /private/tmp/bfr-install-verify
-/private/tmp/bfr-install-verify/bin/pip install .
-cd /private/tmp
-/private/tmp/bfr-install-verify/bin/browser-fetch-router --help
+BFR_TMPDIR="${TMPDIR:-/tmp}"
+BFR_INSTALL_VENV="${BFR_TMPDIR%/}/bfr-install-verify"
+python3 -m venv "$BFR_INSTALL_VENV"
+"$BFR_INSTALL_VENV/bin/pip" install .
+cd "$BFR_TMPDIR"
+"$BFR_INSTALL_VENV/bin/browser-fetch-router" --help
 ```

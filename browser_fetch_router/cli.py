@@ -273,18 +273,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(prog="browser-fetch-router")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    read_web = sub.add_parser("read-web")
+    read_web = sub.add_parser(
+        "read-web",
+        description=(
+            "Fetch a public web URL through the shared router. Paid Parallel "
+            "fallback runs only with --allow-paid and PARALLEL_API_KEY."
+        ),
+    )
     read_web.add_argument("url")
     read_web.add_argument("--json", action="store_true")
     read_web.add_argument("--no-cache", action="store_true")
-    read_web.add_argument("--allow-paid", action="store_true")
+    read_web.add_argument(
+        "--allow-paid",
+        action="store_true",
+        help="Allow paid Parallel fallback when the free/public route is insufficient",
+    )
     read_web.add_argument("--strict-side-effects", action="store_true")
     read_web.add_argument("--allow-side-effects", action="store_true")
     read_web.add_argument("--max-chars", type=int, default=50_000)
 
-    tabs = sub.add_parser("read-user-tabs")
+    cdp_setup_help = (
+        "Uses loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium "
+        "with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 "
+        "--user-data-dir=<temporary-profile>; do not use the normal profile."
+    )
+    tabs = sub.add_parser("read-user-tabs", description=cdp_setup_help)
     tabs_sub = tabs.add_subparsers(dest="tabs_command", required=True)
-    tabs_list = tabs_sub.add_parser("list")
+    tabs_list = tabs_sub.add_parser("list", description=cdp_setup_help)
     tabs_list.add_argument("--json", action="store_true")
     tabs_list.add_argument("--all", action="store_true")
     tabs_list.add_argument("--show-all", action="store_true")
@@ -295,14 +310,14 @@ def build_parser() -> argparse.ArgumentParser:
     # invocation (Gemini medium on commit 3b131b7).
     tabs_list.add_argument("--approval-scope")
     tabs_list.add_argument("--persist-approval", action="store_true")
-    tabs_read = tabs_sub.add_parser("read")
+    tabs_read = tabs_sub.add_parser("read", description=cdp_setup_help)
     tabs_read.add_argument("target")
     tabs_read.add_argument("--json", action="store_true")
     tabs_read.add_argument("--approval-scope")
     tabs_read.add_argument("--persist-approval", action="store_true")
     tabs_read.add_argument("--allow-remote-cdp", action="store_true")
     tabs_read.add_argument("--max-chars", type=int, default=20_000)
-    tabs_shot = tabs_sub.add_parser("screenshot")
+    tabs_shot = tabs_sub.add_parser("screenshot", description=cdp_setup_help)
     tabs_shot.add_argument("target")
     tabs_shot.add_argument("--output", required=True)
     tabs_shot.add_argument("--json", action="store_true")
@@ -313,10 +328,21 @@ def build_parser() -> argparse.ArgumentParser:
     tabs_revoke.add_argument("scope")
     tabs_revoke.add_argument("--json", action="store_true")
 
-    browser = sub.add_parser("interactive-browser")
+    browser = sub.add_parser(
+        "interactive-browser",
+        description=(
+            "Interactive browser task runner. Provider capability truth: "
+            "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; "
+            "browserbase/local=unavailable pending live launch support."
+        ),
+    )
     browser.add_argument("task")
     browser.add_argument("--json", action="store_true")
-    browser.add_argument("--provider", choices=["local", "browserbase", "cloud"])
+    browser.add_argument(
+        "--provider",
+        choices=["local", "browserbase", "cloud"],
+        help="cloud=live; browserbase/local=unavailable pending live launch support",
+    )
     browser.add_argument("--allow-hosted-browser", action="store_true")
     browser.add_argument("--confirm-irreversible")
     browser.add_argument("--max-steps", type=int, default=10)

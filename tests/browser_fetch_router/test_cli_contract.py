@@ -48,6 +48,48 @@ def test_schema_json_emits_schema_version():
     assert payload["output_schema"]["$schema"] == "https://json-schema.org/draft/2020-12/schema"
 
 
+def test_read_web_help_and_schema_document_public_and_paid_paths():
+    from browser_fetch_router.schema import schema_payload
+
+    result = run_cli("read-web", "--help")
+
+    assert result.returncode == 0
+    assert "public web" in result.stdout
+    assert "Parallel" in result.stdout
+    assert "--allow-paid" in result.stdout
+    read_web_schema = schema_payload()["output_schema"]["commandFlags"]["read-web"]
+    assert "public web" in read_web_schema["description"]
+    assert "Parallel" in read_web_schema["properties"]["--allow-paid"]["description"]
+
+
+def test_read_user_tabs_help_and_schema_include_cdp_setup_guidance():
+    from browser_fetch_router.schema import schema_payload
+
+    result = run_cli("read-user-tabs", "list", "--help")
+
+    assert result.returncode == 0
+    assert "127.0.0.1:9222" in result.stdout
+    assert "--remote-debugging-port=9222" in result.stdout
+    read_tabs_schema = schema_payload()["output_schema"]["commandFlags"]["read-user-tabs"]
+    assert "127.0.0.1:9222" in read_tabs_schema["description"]
+    assert "--user-data-dir=<temporary-profile>" in read_tabs_schema["description"]
+
+
+def test_interactive_browser_help_and_schema_mark_provider_capabilities():
+    from browser_fetch_router.schema import schema_payload
+
+    result = run_cli("interactive-browser", "--help")
+
+    assert result.returncode == 0
+    assert "cloud=live" in result.stdout
+    assert "browserbase/local=unavailable" in result.stdout
+    interactive_schema = schema_payload()["output_schema"]["commandFlags"]["interactive-browser"]
+    capabilities = {item["id"]: item for item in interactive_schema["providerCapabilities"]}
+    assert capabilities["cloud"]["status"] == "live"
+    assert capabilities["browserbase"]["status"] == "unavailable"
+    assert capabilities["local"]["status"] == "unavailable"
+
+
 def test_invalid_flag_is_structured_usage_error():
     result = run_cli("read-web", "--invalid-flag", "--json")
     assert result.returncode == 64

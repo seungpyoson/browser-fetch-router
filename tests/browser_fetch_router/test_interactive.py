@@ -62,6 +62,20 @@ def test_browserbase_after_opt_in_reports_provider_unavailable(monkeypatch):
     assert result["evidence"]["provider"] == "browserbase"
 
 
+def test_interactive_provider_capabilities_mark_only_cloud_live():
+    from browser_fetch_router import interactive
+
+    capabilities = interactive.provider_capabilities()
+    by_id = {item["id"]: item for item in capabilities}
+
+    assert by_id["cloud"]["status"] == "live"
+    assert by_id["cloud"]["requires_hosted_opt_in"] is True
+    assert by_id["browserbase"]["status"] == "unavailable"
+    assert by_id["browserbase"]["unavailable_reason"] == "live_launch_not_implemented"
+    assert by_id["local"]["status"] == "unavailable"
+    assert by_id["local"]["unavailable_reason"] == "live_launch_not_implemented"
+
+
 def test_bare_open_url_is_tier_a():
     from browser_fetch_router.interactive import classify_action
 
@@ -170,6 +184,104 @@ def test_cloud_success_without_reported_cost_releases_reservation(tmp_path, monk
     assert ledger.session_total("bfr-cloud-no-cost") == 0.0
 
 
+def test_cloud_failed_provider_without_reported_cost_releases_reservation(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        return {
+            "status": "provider_unavailable",
+            "provider": "browser-use-cloud",
+            "error": {"code": "browser_use_cloud_poll_failed"},
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "remote-no-cost-failure",
+                "remote_status": "running",
+                "step_count": 1,
+            },
+        }
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-no-cost-failure")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-no-cost-failure") == 0.0
+
+
+def test_cloud_failed_provider_with_reported_cost_records_actual_cost(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        return {
+            "status": "provider_unavailable",
+            "provider": "browser-use-cloud",
+            "error": {"code": "browser_use_cloud_max_steps_exceeded"},
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "remote-step-cap",
+                "remote_status": "stopped",
+                "step_count": 3,
+                "total_cost_usd": "0.07",
+                "max_steps": 3,
+            },
+        }
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-step-cap")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-step-cap") == 0.07
+
+
+def test_cloud_provider_exception_releases_reservation(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        raise RuntimeError("provider transport crashed")
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-exception")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_exception"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-exception") == 0.0
+
+
 def test_cloud_session_cap_blocks_second_call_before_provider(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
     from browser_fetch_router.cost import CostLedger
@@ -270,6 +382,42 @@ def test_cloud_daily_cap_blocks_cross_session_call_before_provider(tmp_path, mon
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
     assert ledger.session_total("bfr-cloud-day-a") == 0.18
     assert ledger.session_total("bfr-cloud-day-b") == 0.0
+
+
+def test_cloud_reported_cost_equal_to_cap_is_recorded(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        return {
+            "status": "ok",
+            "provider": "browser-use-cloud",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "remote-boundary",
+                "remote_status": "stopped",
+                "step_count": 1,
+                "total_cost_usd": "0.25",
+            },
+        }
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-boundary")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "ok"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-boundary") == 0.25
 
 
 def test_cloud_provider_overrun_returns_cost_cap_and_disables_session(tmp_path, monkeypatch):

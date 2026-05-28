@@ -23,11 +23,12 @@
     "read-web": {
       "type": "object",
       "required": ["url"],
+      "description": "Fetch a public web URL through the shared router. Paid Parallel fallback runs only with --allow-paid and PARALLEL_API_KEY.",
       "properties": {
         "url": { "type": "string", "format": "uri" },
         "--json": { "type": "boolean" },
         "--no-cache": { "type": "boolean" },
-        "--allow-paid": { "type": "boolean" },
+        "--allow-paid": { "type": "boolean", "description": "Allow paid Parallel fallback when the free/public route is insufficient" },
         "--strict-side-effects": { "type": "boolean" },
         "--allow-side-effects": { "type": "boolean" },
         "--max-chars": { "type": "integer", "default": 50000 }
@@ -35,6 +36,7 @@
     },
     "read-user-tabs": {
       "type": "object",
+      "description": "Reads tabs from loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>; do not use the normal profile.",
       "properties": {
         "tabs_command": { "enum": ["list", "read", "screenshot", "revoke"] },
         "--json": { "type": "boolean" },
@@ -53,10 +55,10 @@
       "properties": {
         "task": { "type": "string" },
         "--json": { "type": "boolean" },
-        "--provider": { "enum": ["local", "browserbase", "cloud"] },
+        "--provider": { "enum": ["local", "browserbase", "cloud"], "description": "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase/local=unavailable pending live launch support" },
         "--allow-hosted-browser": { "type": "boolean" },
         "--confirm-irreversible": { "type": "string" },
-        "--max-steps": { "type": "integer", "default": 10 },
+        "--max-steps": { "type": "integer", "default": 10, "description": "Maximum interactive task steps. Browser Use Cloud is enforced by polling provider stepCount and stopping nonterminal sessions at the cap." },
         "--max-duration-sec": { "type": "integer", "default": 300 },
         "--max-cost-usd": { "type": "number", "default": 0.25 }
       }

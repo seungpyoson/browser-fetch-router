@@ -55,12 +55,15 @@
 - Gemini review found a real reservation leak: Browser Use Cloud success without `total_cost_usd` returned `ok` while leaving the preflight cost reservation in the session ledger.
 - Red TDD test `test_cloud_success_without_reported_cost_releases_reservation` reproduced the leak with `ledger.session_total("bfr-cloud-no-cost") == 0.25` after an `ok` provider result with no reported cost.
 - The fix releases the reservation on the successful no-reported-cost branch, matching the existing failure no-reported-cost behavior.
-- `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `36 passed`.
 - Gemini and DeepSeek review found a second real cost-control bug: `_reserve_hosted_cost()` passed `session_cap=current_session_total + amount` and `daily_cap=current_daily_total + amount`, making cumulative hosted-browser caps ineffective.
 - Red TDD tests `test_cloud_session_cap_blocks_second_call_before_provider` and `test_cloud_daily_cap_blocks_cross_session_call_before_provider` reproduced the bypass: a second paid call still reached the provider and returned `ok` after prior spend.
 - The fix applies the single public `--max-cost-usd` cap to request, session, and daily ledger dimensions until separate knobs exist, failing closed instead of silently allowing cumulative overrun.
-- `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `36 passed`.
-- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `85 passed`.
+- DeepSeek and Kimi review found a third real Browser Use Cloud control gap: `--max-steps` was accepted and passed through, but Browser Use Cloud v3 does not expose a create-session `maxSteps` field and the client did not enforce steps while polling.
+- Red TDD test `test_browser_use_cloud_stops_running_session_when_step_cap_is_reached` reproduced the gap by returning `browser_use_cloud_empty_output` after an over-cap running session instead of stopping the provider session with a step-cap error.
+- The fix enforces `--max-steps` by polling provider `stepCount`, calling the Browser Use Cloud stop endpoint for nonterminal sessions at the cap, and preserving any stop-response `totalCostUsd` so the ledger records billed spend on provider failure.
+- Red TDD test `test_cloud_provider_exception_releases_reservation` reproduced an exception path that could escape while a preflight reservation was live; the fix releases the reservation and returns a structured `provider_unavailable/browser_use_cloud_exception` envelope.
+- `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `47 passed`.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_read_user_tabs.py tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py tests/browser_fetch_router/test_install_agent.py -q` exited `0` with `159 passed`.
 
 ## Decision: Add explicit global install freshness verification
 
@@ -82,14 +85,19 @@
 - Require live vendor tests in CI: rejected unless CI secret management is explicitly configured later.
 - Keep live vendor tests as local gated verification with env vars: chosen.
 
-## Evidence: final branch verification after hosted-browser cap fix
+## Evidence: current branch verification after reliability fixes
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `722 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `738 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
 - `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
-- Package installability passed from `/private/tmp`: `pip install -q .` and `browser-fetch-router --help` both exited `0`.
+- Secret-pattern sweep found no live secrets; the only match was an intentional fake audit fixture.
+- Package installability passed from a temporary outside-repo virtualenv: `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` all exited `0`; schema reported `browser-fetch-router.v1` and `interactive-browser.providerCapabilities[0].status == live`.
 - Registry-backed current-package paid smoke exited `0` with `status: ok`, `provider: parallel`, and `content_markdown: Hello World!`.
-- Registry-backed current-package paid acceptance exited `0`; `19` cases passed, `0` failed, and `parallel-paid-extract` returned `ok`.
+- Live Reddit listing smoke exited `0` with `status: ok`, `provider: reddit-json`, provider URL `https://www.reddit.com/r/python.json?limit=3`, and non-empty listing content.
+- Live `read-user-tabs` CDP smoke used a temporary Chrome profile on loopback `127.0.0.1:9222`; `/json/version`, `list`, `list --all` with approval, `read active`, and `screenshot active` all exited `0` with `status: ok`. The temporary Chrome instance was closed and port `9222` was no longer listening afterward.
+- Registry cache currently has `PARALLEL_API_KEY` present and `BROWSER_USE_API_KEY` absent. A credentialed Browser Use Cloud live smoke remains open until `BROWSER_USE_API_KEY` is added through the key registry; unit/contract tests cover Browser Use Cloud success, auth failure, max-step stop, timeout, exception release, reported-cost recording, and cumulative caps.
+
+The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `738 passed` count because later user-story and review-follow-up tests were added after those captures.
 
 ## Evidence: #58 read-web short-valid page reliability
 

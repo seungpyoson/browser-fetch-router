@@ -14,6 +14,37 @@ from browser_fetch_router.session import current_session_id
 
 HOSTED_BROWSER_MIN_COST_USD = 0.25
 
+_PROVIDER_CAPABILITIES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "cloud",
+        "display_name": "Browser Use Cloud",
+        "status": "live",
+        "requires": ["BROWSER_USE_API_KEY"],
+        "requires_hosted_opt_in": True,
+        "cost_cap_flag": "--max-cost-usd",
+    },
+    {
+        "id": "browserbase",
+        "display_name": "Browserbase",
+        "status": "unavailable",
+        "requires": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"],
+        "requires_hosted_opt_in": True,
+        "unavailable_reason": "live_launch_not_implemented",
+    },
+    {
+        "id": "local",
+        "display_name": "Local browser-use",
+        "status": "unavailable",
+        "requires": ["browser-use"],
+        "requires_hosted_opt_in": False,
+        "unavailable_reason": "live_launch_not_implemented",
+    },
+)
+
+
+def provider_capabilities() -> list[dict[str, Any]]:
+    return [dict(item) for item in _PROVIDER_CAPABILITIES]
+
 # Regex catalogues per action tier.
 TIER_C_PATTERNS = [
     re.compile(r"\b(buy|purchase|order|checkout|pay|transfer|wire|send\s+money)\b", re.IGNORECASE),
@@ -360,13 +391,26 @@ def run_interactive_browser(
 
         from browser_fetch_router.providers import browser_use_cloud
 
-        result = browser_use_cloud.run_task(
-            task=task,
-            api_key=api_key,
-            max_steps=max_steps,
-            max_duration_sec=max_duration_sec,
-            max_cost_usd=cost_cap,
-        )
+        try:
+            result = browser_use_cloud.run_task(
+                task=task,
+                api_key=api_key,
+                max_steps=max_steps,
+                max_duration_sec=max_duration_sec,
+                max_cost_usd=cost_cap,
+            )
+        except Exception:
+            ledger.release(reservation)
+            return _provider_result_envelope({
+                "status": "provider_unavailable",
+                "provider": "browser-use-cloud",
+                "error": {"code": "browser_use_cloud_exception"},
+                "evidence": {
+                    "provider": "browser-use-cloud",
+                    "session_id": session_id,
+                    "reason": "provider_exception",
+                },
+            })
         reported_cost = _reported_cost(result.get("evidence"))
         if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
             ledger.release(reservation)
