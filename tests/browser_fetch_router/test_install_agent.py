@@ -35,6 +35,38 @@ def test_unknown_agent_raises(tmp_path, monkeypatch):
         destination_for("unknown-agent")
 
 
+def test_install_agent_unknown_agent_returns_usage_error_envelope():
+    from browser_fetch_router import install_agent as module
+
+    result = module.install_agent("unknown-agent")
+
+    assert result["status"] == "usage_error"
+    assert result["error"]["code"] == "unknown_agent"
+    assert "unknown-agent" in result["error"]["message"]
+    assert "claude" in result["error"]["message"]
+
+
+def test_install_agents_unknown_agent_returns_usage_error_without_side_effects(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
+    module.destination_for("codex").parent.parent.mkdir(parents=True)
+    monkeypatch.setattr(
+        module,
+        "_run_verification",
+        lambda: (_ for _ in ()).throw(AssertionError("verification should not run")),
+    )
+
+    result = module.install_agents(["codex", "unknown-agent"], force=True)
+
+    assert result["status"] == "usage_error"
+    assert result["error"]["code"] == "unknown_agent"
+    assert result["results"] == []
+    assert not module.destination_for("codex").exists()
+
+
 def test_adapter_text_mentions_agent_name():
     text = adapter_text("kimi")
     assert "BFR_AGENT=kimi" in text
@@ -242,6 +274,31 @@ def test_install_agents_does_not_duplicate_results_under_evidence(
     assert result["results"][0]["status"] == "ok"
     assert result["results"][0]["evidence"]["verification"]["success"] is True
     assert result["evidence"] is None
+
+
+def test_install_agents_reuses_single_verification_result(tmp_path, monkeypatch):
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
+    monkeypatch.setenv("GEMINI_HOME", str(tmp_path / "gemini-root"))
+    for agent in ["codex", "gemini"]:
+        module.destination_for(agent).parent.parent.mkdir(parents=True)
+    calls = []
+
+    def fake_verification():
+        calls.append("verification")
+        return {"success": True, "failures": []}
+
+    monkeypatch.setattr(module, "_run_verification", fake_verification)
+
+    result = module.install_agents(["codex", "gemini"], force=True)
+
+    assert len(calls) == 1
+    assert result["status"] == "ok"
+    assert [
+        entry["evidence"]["verification"]["success"]
+        for entry in result["results"]
+    ] == [True, True]
 
 
 def test_explicit_pi_cli_writes_documented_default(capsys, tmp_path, monkeypatch):

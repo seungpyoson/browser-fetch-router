@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -98,6 +99,15 @@ def _safe_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
 
 
+def _unknown_agent_error(agents: list[str]) -> dict[str, str]:
+    unknown = ", ".join(agents)
+    supported = ", ".join(AGENTS)
+    return {
+        "code": "unknown_agent",
+        "message": f"Unknown agent(s): {unknown}. Supported agents: {supported}.",
+    }
+
+
 def destination_for(agent: str, *, adapter_path: str | None = None) -> Path:
     if adapter_path:
         # Class-D round-17: agent-channel write containment. See W1/W5
@@ -123,8 +133,25 @@ def install_agents(
     force: bool = False,
     default_mode: bool = False,
 ) -> dict[str, Any]:
+    invalid = [agent for agent in agents if agent not in INSTALL_CONTRACTS]
+    if invalid:
+        return envelope(
+            command="install-agent",
+            status="usage_error",
+            error=_unknown_agent_error(invalid),
+            results=[],
+        )
+
     results = []
     all_ok = True
+    shared_verification: dict[str, Any] | None = None
+
+    def shared_verification_runner() -> dict[str, Any]:
+        nonlocal shared_verification
+        if shared_verification is None:
+            shared_verification = _run_verification()
+        return shared_verification
+
     for agent in agents:
         contract = INSTALL_CONTRACTS[agent]
         if default_mode and not contract.default_enabled:
@@ -135,7 +162,11 @@ def install_agents(
                 "skip_reason": contract.default_skip_reason,
             })
             continue
-        result = install_agent(agent, force=force)
+        result = install_agent(
+            agent,
+            force=force,
+            verification_runner=shared_verification_runner,
+        )
         entry = {
             "agent": agent,
             "status": result.get("status"),
@@ -211,8 +242,21 @@ Adapter agent: {agent}
 """
 
 
-def install_agent(agent: str, *, force: bool = False, adapter_path: str | None = None) -> dict[str, Any]:
-    contract = INSTALL_CONTRACTS[agent]
+def install_agent(
+    agent: str,
+    *,
+    force: bool = False,
+    adapter_path: str | None = None,
+    verification: dict[str, Any] | None = None,
+    verification_runner: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    contract = INSTALL_CONTRACTS.get(agent)
+    if contract is None:
+        return envelope(
+            command="install-agent",
+            status="usage_error",
+            error=_unknown_agent_error([agent]),
+        )
     try:
         dest = destination_for(agent, adapter_path=adapter_path)
     except ValueError as exc:
@@ -252,7 +296,9 @@ def install_agent(agent: str, *, force: bool = False, adapter_path: str | None =
     # (no `path.write_text` / `path.write_bytes` in production code;
     # static guard locks the invariant in).
     atomic_write_bytes(dest, adapter_text(agent).encode("utf-8"), mode=0o644)
-    verification = _run_verification()
+    if verification is None:
+        verification_fn = verification_runner or _run_verification
+        verification = verification_fn()
     if not verification["success"]:
         return envelope(
             command="install-agent",
