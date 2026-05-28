@@ -147,6 +147,144 @@ def test_browserbase_after_opt_in_dispatches_stagehand_with_cost_guard(tmp_path,
     assert ledger.session_total("bfr-browserbase-ok") == 0
 
 
+def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browserbase",
+                "session_id": f"bb-{len(calls)}",
+                "total_cost_usd": "0.18",
+            },
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-day-a")
+    first = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-day-b")
+    second = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert first["status"] == "ok"
+    assert second["status"] == "ok"
+    assert len(calls) == 2
+
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-browserbase-day-a") == 0.18
+    assert ledger.session_total("bfr-browserbase-day-b") == 0.18
+
+
+def test_browserbase_invalid_daily_cap_rejects_before_provider(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {"provider": "browserbase", "session_id": "bb-invalid"},
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-invalid-daily")
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+
+    for value in ("abc", "-1", "nan", "inf"):
+        monkeypatch.setenv("BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD", value)
+        result = interactive.run_interactive_browser(
+            "Open https://example.com and report the page title",
+            provider="browserbase",
+            allow_hosted_browser=True,
+            max_cost_usd=0.25,
+        )
+
+        assert result["status"] == "usage_error"
+        assert result["error"] == {
+            "code": "invalid_daily_cost_cap",
+            "env": "BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD",
+        }
+
+    assert calls == []
+
+
+def test_browserbase_daily_cap_below_call_cap_blocks_before_provider(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {"provider": "browserbase", "session_id": "bb-low-cap"},
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-daily-below-call")
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+    monkeypatch.setenv("BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD", "0.10")
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "cost_cap_exceeded"
+    assert result["evidence"]["reason"] == "paid_session_disabled_or_cap_exceeded"
+    assert calls == []
+
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-browserbase-daily-below-call") == 0.0
+
+
 def test_interactive_provider_capabilities_mark_cloud_and_browserbase_live_without_local():
     from browser_fetch_router import interactive
 
