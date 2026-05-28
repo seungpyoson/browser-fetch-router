@@ -56,6 +56,11 @@
 - Red TDD test `test_cloud_success_without_reported_cost_releases_reservation` reproduced the leak with `ledger.session_total("bfr-cloud-no-cost") == 0.25` after an `ok` provider result with no reported cost.
 - The fix releases the reservation on the successful no-reported-cost branch, matching the existing failure no-reported-cost behavior.
 - `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `36 passed`.
+- Gemini and DeepSeek review found a second real cost-control bug: `_reserve_hosted_cost()` passed `session_cap=current_session_total + amount` and `daily_cap=current_daily_total + amount`, making cumulative hosted-browser caps ineffective.
+- Red TDD tests `test_cloud_session_cap_blocks_second_call_before_provider` and `test_cloud_daily_cap_blocks_cross_session_call_before_provider` reproduced the bypass: a second paid call still reached the provider and returned `ok` after prior spend.
+- The fix applies the single public `--max-cost-usd` cap to request, session, and daily ledger dimensions until separate knobs exist, failing closed instead of silently allowing cumulative overrun.
+- `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `36 passed`.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `85 passed`.
 
 ## Decision: Add explicit global install freshness verification
 
@@ -77,10 +82,10 @@
 - Require live vendor tests in CI: rejected unless CI secret management is explicitly configured later.
 - Keep live vendor tests as local gated verification with env vars: chosen.
 
-## Evidence: final branch verification after hosted-browser reservation fix
+## Evidence: final branch verification after hosted-browser cap fix
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `720 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
-- `git diff --check HEAD~1..HEAD` exited `0`.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `722 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
 - Package installability passed from `/private/tmp`: `pip install -q .` and `browser-fetch-router --help` both exited `0`.
 - Registry-backed current-package paid smoke exited `0` with `status: ok`, `provider: parallel`, and `content_markdown: Hello World!`.

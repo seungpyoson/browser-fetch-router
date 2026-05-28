@@ -186,13 +186,16 @@ def _reserve_hosted_cost(
     *,
     request_cap: float,
 ) -> str | bool:
+    # The public CLI exposes one hosted-browser cost cap. Until separate
+    # request/session/day knobs exist, fail closed by applying that cap to
+    # all three ledger dimensions.
     return ledger.reserve(
         session_id,
         provider,
         amount,
         request_cap=request_cap,
-        session_cap=ledger.session_total(session_id) + amount,
-        daily_cap=ledger.daily_total() + amount,
+        session_cap=request_cap,
+        daily_cap=request_cap,
     )
 
 

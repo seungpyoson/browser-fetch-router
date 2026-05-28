@@ -23,6 +23,7 @@ With `BROWSER_USE_API_KEY` present and hosted browser opt-in:
 - `evidence.remote_status`: terminal remote status
 - `evidence.total_cost_usd`: provider-reported cost when available
 - Cost ledger records the actual reported cost or disables the session on overrun
+- The single `--max-cost-usd` value is applied as the request, session, and daily hosted-browser cap until separate knobs exist.
 
 ## Browserbase And Local Provider Contract
 
