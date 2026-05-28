@@ -77,6 +77,15 @@
 - Require live vendor tests in CI: rejected unless CI secret management is explicitly configured later.
 - Keep live vendor tests as local gated verification with env vars: chosen.
 
+## Evidence: final branch verification after hosted-browser reservation fix
+
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `720 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `git diff --check HEAD~1..HEAD` exited `0`.
+- Tracked-file contributor-path sweep for local home path patterns found `0` matches.
+- Package installability passed from `/private/tmp`: `pip install -q .` and `browser-fetch-router --help` both exited `0`.
+- Registry-backed current-package paid smoke exited `0` with `status: ok`, `provider: parallel`, and `content_markdown: Hello World!`.
+- Registry-backed current-package paid acceptance exited `0`; `19` cases passed, `0` failed, and `parallel-paid-extract` returned `ok`.
+
 ## Evidence: #58 read-web short-valid page reliability
 
 **Baseline before fix**:
