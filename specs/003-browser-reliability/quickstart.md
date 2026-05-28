@@ -114,7 +114,7 @@ global command is stale, the verifier returns `stale_global_install` with a
 
 ## Latest Local Verification Evidence
 
-- `python3 -m pytest tests/browser_fetch_router -q` -> `742 passed`
+- `python3 -m pytest tests/browser_fetch_router -q` -> `743 passed`
 - `git diff --check` -> clean
 - Tracked-file contributor-path sweep -> no matches
 - Outside-repo temporary virtualenv install -> `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` passed

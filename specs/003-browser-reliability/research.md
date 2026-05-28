@@ -87,7 +87,7 @@
 
 ## Evidence: current branch verification after reliability fixes
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `742 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `743 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
 - `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
 - Secret-pattern sweep found no live secrets; the only match was an intentional fake audit fixture.
@@ -105,8 +105,9 @@
 - Live Reddit listing smoke exited `0` with `status: ok`, `provider: reddit-json`, provider URL `https://www.reddit.com/r/python.json?limit=3`, and non-empty listing content.
 - Live `read-user-tabs` CDP smoke used a temporary Chrome profile on loopback `127.0.0.1:9222`; `/json/version`, `list`, `list --all` with approval, `read active`, and `screenshot active` all exited `0` with `status: ok`. The temporary Chrome instance was closed and port `9222` was no longer listening afterward.
 - Registry cache currently has `PARALLEL_API_KEY` present and `BROWSER_USE_API_KEY` absent. A credentialed Browser Use Cloud live smoke remains open until `BROWSER_USE_API_KEY` is added through the key registry; unit/contract tests cover Browser Use Cloud success, auth failure, max-step stop, timeout, exception release, reported-cost recording, and cumulative caps.
+- Latest TDD follow-up at `75ec0df` reclassified a missing global shim as a `command_mismatches` entry instead of `schema_mismatches`; the red public-CLI regression test failed before the one-line fix and passed afterward. Slice review approvals were obtained from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok. Final whole-feature T046 remains pending until the credentialed Browser Use Cloud live smoke is complete.
 
-The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `738 passed` count because later user-story and review-follow-up tests were added after those captures.
+The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `743 passed` count because later user-story and review-follow-up tests were added after those captures.
 
 ## Evidence: #58 read-web short-valid page reliability
 
