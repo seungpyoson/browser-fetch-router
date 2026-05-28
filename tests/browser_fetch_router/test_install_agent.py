@@ -740,6 +740,21 @@ def test_install_agent_contract_docs_include_support_matrix_and_caveats():
     assert "SKILL.md" in doc
 
 
+def test_global_install_contract_docs_include_freshness_verifier():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    contract = Path(
+        "specs/003-browser-reliability/contracts/global-install-verification.md"
+    ).read_text(encoding="utf-8")
+    install_contract = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    for doc in [readme, contract, install_contract]:
+        assert "doctor --global-install --json" in doc
+        assert "stale_global_install" in doc
+        assert "pipx reinstall" in doc
+
+
 def test_install_agent_contract_docs_pin_skip_reason_and_adapter_path_modes():
     public_doc = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
         encoding="utf-8"

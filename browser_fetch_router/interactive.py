@@ -389,9 +389,9 @@ def run_interactive_browser(
                 reason="paid_session_disabled_or_cap_exceeded",
             )
 
-        from browser_fetch_router.providers import browser_use_cloud
-
         try:
+            from browser_fetch_router.providers import browser_use_cloud
+
             result = browser_use_cloud.run_task(
                 task=task,
                 api_key=api_key,

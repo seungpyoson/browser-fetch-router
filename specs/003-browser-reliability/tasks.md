@@ -136,15 +136,15 @@
 
 ### Tests for User Story 5
 
-- [ ] T037 [P] [US5] Add failing stale-global-install detection tests in `tests/browser_fetch_router/test_install_agent.py`
-- [ ] T038 [P] [US5] Add failing outside-repo package installability and schema-default verification tests in `tests/browser_fetch_router/test_cli_contract.py`
+- [x] T037 [P] [US5] Add failing stale-global-install detection tests in `tests/browser_fetch_router/test_cli_contract.py` and docs contract coverage in `tests/browser_fetch_router/test_install_agent.py`
+- [x] T038 [P] [US5] Add failing outside-repo package installability and schema-default verification tests in `tests/browser_fetch_router/test_cli_contract.py`
 
 ### Implementation for User Story 5
 
-- [ ] T039 [US5] Add global install freshness verification support to `browser_fetch_router/doctor.py` or `browser_fetch_router/install_agent.py`
-- [ ] T040 [US5] Document global reinstall and freshness verification in `README.md` and `docs/browser-fetch-router-install-agent-contract.md`
+- [x] T039 [US5] Add global install freshness verification support to `browser_fetch_router/doctor.py` or `browser_fetch_router/install_agent.py`
+- [x] T040 [US5] Document global reinstall and freshness verification in `README.md` and `docs/browser-fetch-router-install-agent-contract.md`
 - [x] T041 [US5] Validate `pip install .` and `browser-fetch-router --help` from outside the repository in `specs/003-browser-reliability/quickstart.md`
-- [ ] T042 [US5] Validate global adapter installation for default agents plus explicit Kimi in `specs/003-browser-reliability/quickstart.md`
+- [x] T042 [US5] Validate global adapter installation for default agents plus explicit Kimi in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 5 is independently testable from the real global shim.
 

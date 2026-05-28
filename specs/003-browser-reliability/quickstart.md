@@ -102,17 +102,31 @@ command -v browser-fetch-router
 browser-fetch-router --help
 browser-fetch-router schema --json
 browser-fetch-router doctor --json
+browser-fetch-router doctor --global-install --json
 browser-fetch-router read-web https://example.com --json --no-cache
 ```
 
-Expected: the global shim resolves to the reviewed package, schema defaults match the branch, doctor is `ok`, and the public smoke succeeds.
+Expected: the global shim resolves to the reviewed package, schema defaults
+match the branch, doctor is `ok`, `doctor --global-install --json` reports the
+shim path and current schema defaults, and the public smoke succeeds. If the
+global command is stale, the verifier returns `stale_global_install` with a
+`pipx reinstall --force .` reinstall instruction.
 
 ## Latest Local Verification Evidence
 
-- `python3 -m pytest tests/browser_fetch_router -q` -> `738 passed`
+- `python3 -m pytest tests/browser_fetch_router -q` -> `742 passed`
 - `git diff --check` -> clean
 - Tracked-file contributor-path sweep -> no matches
 - Outside-repo temporary virtualenv install -> `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` passed
+- Branch `doctor --global-install --json` verifier first detected the stale
+  global shim (`interactive-browser.--max-cost-usd` default `0.05`, missing
+  provider capability statuses). After `pipx install --force .`, the same
+  verifier passed from a temporary HOME with `status: ok`, cost default `0.25`,
+  and cloud provider status `live`.
+- Global controlled-HOME adapter smoke passed: `install-agent --all --force
+  --json` returned `ok` with Kimi skipped/default-disabled by design, explicit
+  `install-agent kimi --force --json` returned `ok`, and global `read-web
+  https://example.com --json --no-cache` returned `ok` via `jina-reader`.
 - Registry-backed Parallel paid smoke -> `status: ok`, `provider: parallel`
 - Live Reddit listing smoke -> `status: ok`, `provider: reddit-json`
 - Live temporary-profile CDP smoke -> `/json/version`, `read-user-tabs list`, `list --all`, `read active`, and `screenshot active` all passed; the temporary Chrome instance was closed afterward

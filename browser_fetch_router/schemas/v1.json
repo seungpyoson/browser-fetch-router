@@ -36,7 +36,7 @@
     },
     "read-user-tabs": {
       "type": "object",
-      "description": "Reads tabs from loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>; do not use the normal profile.",
+      "description": "Reads tabs from loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>; do not use the normal profile. --allow-remote-cdp is an explicit override for non-loopback endpoints.",
       "properties": {
         "tabs_command": { "enum": ["list", "read", "screenshot", "revoke"] },
         "--json": { "type": "boolean" },
@@ -52,6 +52,7 @@
     "interactive-browser": {
       "type": "object",
       "required": ["task"],
+      "description": "Interactive browser task runner. Provider capability truth: cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase/local=unavailable pending live launch support.",
       "properties": {
         "task": { "type": "string" },
         "--json": { "type": "boolean" },
@@ -63,7 +64,13 @@
         "--max-cost-usd": { "type": "number", "default": 0.25 }
       }
     },
-    "doctor": { "type": "object", "properties": { "--json": { "type": "boolean" } } },
+    "doctor": {
+      "type": "object",
+      "properties": {
+        "--json": { "type": "boolean" },
+        "--global-install": { "type": "boolean", "description": "Verify the real browser-fetch-router shim, schema defaults, and doctor health against this package's expected contract" }
+      }
+    },
     "cleanup": {
       "type": "object",
       "properties": {

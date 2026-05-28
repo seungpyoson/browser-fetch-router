@@ -15,15 +15,59 @@ def subprocess_env():
     return env
 
 
-def run_cli(*args):
+def run_cli(*args, env=None):
     return subprocess.run(
         [sys.executable, "-m", "browser_fetch_router", *args],
-        env=subprocess_env(),
+        env=env or subprocess_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
     )
+
+
+def write_fake_global_bfr(tmp_path, schema_payload, *, doctor_status="ok"):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "browser-fetch-router"
+    script = f"""#!/usr/bin/env python3
+import json
+import sys
+
+schema_payload = {json.dumps(schema_payload)!r}
+doctor_status = {doctor_status!r}
+
+args = sys.argv[1:]
+if args == ["--help"]:
+    print("browser-fetch-router read-web read-user-tabs interactive-browser doctor cleanup schema install-agent")
+    raise SystemExit(0)
+if args == ["schema", "--json"]:
+    print(schema_payload)
+    raise SystemExit(0)
+if args == ["doctor", "--json"]:
+    print(json.dumps({{
+        "schema_version": "browser-fetch-router.v1",
+        "command": "doctor",
+        "status": doctor_status,
+        "url": None,
+        "route": None,
+        "provider": None,
+        "title": None,
+        "content_markdown": None,
+        "artifacts": [],
+        "quality": None,
+        "evidence": {{"paths": {{}}}},
+        "approval": {{"required": False, "scope": None}},
+        "next_path": None,
+        "error": None if doctor_status == "ok" else {{"code": "fake_doctor_failed"}},
+    }}))
+    raise SystemExit(0 if doctor_status == "ok" else 3)
+print("unexpected args: " + " ".join(args), file=sys.stderr)
+raise SystemExit(64)
+"""
+    exe.write_text(script)
+    exe.chmod(0o755)
+    return exe
 
 
 def test_help_works_from_any_cwd(tmp_path):
@@ -70,9 +114,11 @@ def test_read_user_tabs_help_and_schema_include_cdp_setup_guidance():
     assert result.returncode == 0
     assert "127.0.0.1:9222" in result.stdout
     assert "--remote-debugging-port=9222" in result.stdout
+    assert "--allow-remote-cdp" in result.stdout
     read_tabs_schema = schema_payload()["output_schema"]["commandFlags"]["read-user-tabs"]
     assert "127.0.0.1:9222" in read_tabs_schema["description"]
     assert "--user-data-dir=<temporary-profile>" in read_tabs_schema["description"]
+    assert "--allow-remote-cdp" in read_tabs_schema["description"]
 
 
 def test_interactive_browser_help_and_schema_mark_provider_capabilities():
@@ -83,7 +129,10 @@ def test_interactive_browser_help_and_schema_mark_provider_capabilities():
     assert result.returncode == 0
     assert "cloud=live" in result.stdout
     assert "browserbase/local=unavailable" in result.stdout
+    assert "stepCount" in result.stdout
     interactive_schema = schema_payload()["output_schema"]["commandFlags"]["interactive-browser"]
+    assert "cloud=live" in interactive_schema["description"]
+    assert "browserbase/local=unavailable" in interactive_schema["description"]
     capabilities = {item["id"]: item for item in interactive_schema["providerCapabilities"]}
     assert capabilities["cloud"]["status"] == "live"
     assert capabilities["browserbase"]["status"] == "unavailable"
@@ -131,6 +180,54 @@ def test_doctor_uses_temp_home_and_reports_paths(tmp_path, monkeypatch):
     assert str(tmp_path) in paths["config"]
     assert str(tmp_path) in paths["state"]
     assert str(tmp_path) in paths["cache"]
+
+
+def test_doctor_global_install_verification_reports_current_shim(tmp_path):
+    from browser_fetch_router.schema import schema_payload
+
+    fake_exe = write_fake_global_bfr(tmp_path, schema_payload())
+    env = subprocess_env()
+    env["HOME"] = str(tmp_path / "home")
+    env["PATH"] = str(fake_exe.parent) + os.pathsep + env.get("PATH", "")
+
+    result = run_cli("doctor", "--global-install", "--json", env=env)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    global_install = payload["evidence"]["global_install"]
+    assert global_install["shim_path"] == str(fake_exe)
+    assert global_install["schema_version"] == "browser-fetch-router.v1"
+    assert global_install["schema_defaults"]["interactive-browser.--max-cost-usd"] == 0.25
+    assert global_install["schema_defaults"]["interactive-browser.--max-steps"] == 10
+    assert global_install["doctor_status"] == "ok"
+
+
+def test_doctor_global_install_verification_detects_stale_schema_defaults(tmp_path):
+    from browser_fetch_router.schema import schema_payload
+
+    stale_schema = schema_payload()
+    stale_schema["output_schema"]["commandFlags"]["interactive-browser"]["properties"][
+        "--max-cost-usd"
+    ]["default"] = 0.05
+    fake_exe = write_fake_global_bfr(tmp_path, stale_schema)
+    env = subprocess_env()
+    env["HOME"] = str(tmp_path / "home")
+    env["PATH"] = str(fake_exe.parent) + os.pathsep + env.get("PATH", "")
+
+    result = run_cli("doctor", "--global-install", "--json", env=env)
+
+    assert result.returncode == 3
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "tool_setup_failed"
+    assert payload["error"]["code"] == "stale_global_install"
+    assert "pipx reinstall" in payload["error"]["reinstall_instruction"]
+    global_install = payload["evidence"]["global_install"]
+    assert global_install["schema_mismatches"] == [{
+        "path": "interactive-browser.--max-cost-usd",
+        "expected": 0.25,
+        "actual": 0.05,
+    }]
 
 
 # --- Dispatcher safety net: every command must produce an envelope, never a

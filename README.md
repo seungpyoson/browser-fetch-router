@@ -80,6 +80,17 @@ The supported/default agent matrix, Pi migration note, Kimi inheritance caveat,
 environment override behavior, and `--adapter-path` rules are documented in
 [`docs/browser-fetch-router-install-agent-contract.md`](docs/browser-fetch-router-install-agent-contract.md).
 
+To prove the real global command is not stale, run:
+
+```bash
+browser-fetch-router doctor --global-install --json
+```
+
+The verifier reports the resolved shim path, symlink target when present,
+schema defaults, and doctor health. If the global command does not match this
+package's expected schema contract it returns `stale_global_install` with a
+`pipx reinstall --force .` reinstall instruction.
+
 ## Tests
 
 ```bash

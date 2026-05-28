@@ -11,13 +11,18 @@ Prove that the real user-facing `browser-fetch-router` command resolves to the r
 - `browser-fetch-router --help` exposes all expected commands.
 - `browser-fetch-router schema --json` contains expected schema version and branch-specific defaults.
 - `browser-fetch-router doctor --json` returns `ok` outside sandbox restrictions.
+- `browser-fetch-router doctor --global-install --json` reports the resolved
+  shim path, symlink target when present, schema defaults, and global doctor
+  health.
 - `browser-fetch-router install-agent --all --json --force` succeeds for default agents and skips explicit-only Kimi by design in a controlled temp HOME or documented global target.
 - Installed adapter files contain `browser-fetch-router` and no secrets.
 - A public `read-web` smoke runs from outside the repository.
 
 ## Stale Install Failure
 
-If schema defaults, command behavior, adapter text, or package location do not match the reviewed branch, verification must fail with a clear stale-install finding and a reinstall instruction.
+If schema defaults, command behavior, adapter text, or package location do not
+match the reviewed branch, verification must fail with
+`stale_global_install` and a `pipx reinstall --force .` reinstall instruction.
 
 ## Acceptance Commands
 
@@ -26,6 +31,7 @@ command -v browser-fetch-router
 browser-fetch-router --help
 browser-fetch-router schema --json
 browser-fetch-router doctor --json
+browser-fetch-router doctor --global-install --json
 browser-fetch-router read-web https://example.com --json --no-cache
 ```
 

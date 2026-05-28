@@ -143,13 +143,22 @@ def test_browser_use_cloud_stops_running_session_when_step_cap_is_reached():
     assert client.calls[2]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-steps/stop"
 
 
-def test_browser_use_cloud_times_out_without_polling_after_deadline(monkeypatch):
+def test_browser_use_cloud_stops_running_session_when_deadline_is_reached(monkeypatch):
     from browser_fetch_router.providers import browser_use_cloud
 
     ticks = iter([0.0, 2.0])
     monkeypatch.setattr(browser_use_cloud.time, "monotonic", lambda: next(ticks))
     client = FakeHttpClient([
         FakeResponse(200, {"id": "sess-timeout", "status": "running", "stepCount": 1}),
+        FakeResponse(
+            200,
+            {
+                "id": "sess-timeout",
+                "status": "stopped",
+                "stepCount": 1,
+                "totalCostUsd": "0.02",
+            },
+        ),
     ])
 
     result = browser_use_cloud.run_task(
@@ -164,4 +173,7 @@ def test_browser_use_cloud_times_out_without_polling_after_deadline(monkeypatch)
 
     assert result["status"] == "provider_unavailable"
     assert result["error"]["code"] == "browser_use_cloud_timeout"
-    assert [call["method"] for call in client.calls] == ["POST"]
+    assert result["evidence"]["remote_status"] == "stopped"
+    assert result["evidence"]["total_cost_usd"] == "0.02"
+    assert [call["method"] for call in client.calls] == ["POST", "POST"]
+    assert client.calls[1]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-timeout/stop"

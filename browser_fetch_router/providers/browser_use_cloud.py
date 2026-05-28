@@ -73,6 +73,9 @@ def run_task(
             evidence["max_steps"] = step_limit
             return _provider_error("browser_use_cloud_max_steps_exceeded", evidence=evidence)
         if time.monotonic() >= deadline:
+            stopped = _stop_session(client, api_key, session_id)
+            if stopped:
+                latest = stopped
             return _provider_error(
                 "browser_use_cloud_timeout",
                 evidence=_evidence(session_id, latest),

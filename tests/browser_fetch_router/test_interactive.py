@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 
+import builtins
+
+
 def test_local_interactive_browser_reports_provider_unavailable(monkeypatch):
     from browser_fetch_router import interactive
 
@@ -280,6 +283,35 @@ def test_cloud_provider_exception_releases_reservation(tmp_path, monkeypatch):
     assert result["error"]["code"] == "browser_use_cloud_exception"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
     assert ledger.session_total("bfr-cloud-exception") == 0.0
+
+
+def test_cloud_provider_import_error_releases_reservation(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "browser_fetch_router.providers" and "browser_use_cloud" in fromlist:
+            raise ImportError("browser use provider missing")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-import-error")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_exception"
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-import-error") == 0.0
 
 
 def test_cloud_session_cap_blocks_second_call_before_provider(tmp_path, monkeypatch):

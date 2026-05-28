@@ -87,11 +87,20 @@
 
 ## Evidence: current branch verification after reliability fixes
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `738 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `742 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
 - `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
 - Secret-pattern sweep found no live secrets; the only match was an intentional fake audit fixture.
 - Package installability passed from a temporary outside-repo virtualenv: `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` all exited `0`; schema reported `browser-fetch-router.v1` and `interactive-browser.providerCapabilities[0].status == live`.
+- Branch `doctor --global-install --json` verifier first detected the stale
+  global shim (`interactive-browser.--max-cost-usd` default `0.05`, missing
+  provider capability statuses). After `pipx install --force .`, the same
+  verifier passed from a temporary HOME with `status: ok`, cost default `0.25`,
+  and cloud provider status `live`.
+- Global controlled-HOME adapter smoke passed: `install-agent --all --force
+  --json` returned `ok` with Kimi skipped/default-disabled by design, explicit
+  `install-agent kimi --force --json` returned `ok`, and global `read-web
+  https://example.com --json --no-cache` returned `ok` via `jina-reader`.
 - Registry-backed current-package paid smoke exited `0` with `status: ok`, `provider: parallel`, and `content_markdown: Hello World!`.
 - Live Reddit listing smoke exited `0` with `status: ok`, `provider: reddit-json`, provider URL `https://www.reddit.com/r/python.json?limit=3`, and non-empty listing content.
 - Live `read-user-tabs` CDP smoke used a temporary Chrome profile on loopback `127.0.0.1:9222`; `/json/version`, `list`, `list --all` with approval, `read active`, and `screenshot active` all exited `0` with `status: ok`. The temporary Chrome instance was closed and port `9222` was no longer listening afterward.

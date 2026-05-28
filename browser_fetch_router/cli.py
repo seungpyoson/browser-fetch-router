@@ -295,7 +295,8 @@ def build_parser() -> argparse.ArgumentParser:
     cdp_setup_help = (
         "Uses loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium "
         "with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 "
-        "--user-data-dir=<temporary-profile>; do not use the normal profile."
+        "--user-data-dir=<temporary-profile>; do not use the normal profile. "
+        "--allow-remote-cdp is an explicit override for non-loopback endpoints."
     )
     tabs = sub.add_parser("read-user-tabs", description=cdp_setup_help)
     tabs_sub = tabs.add_subparsers(dest="tabs_command", required=True)
@@ -345,11 +346,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     browser.add_argument("--allow-hosted-browser", action="store_true")
     browser.add_argument("--confirm-irreversible")
-    browser.add_argument("--max-steps", type=int, default=10)
+    browser.add_argument(
+        "--max-steps",
+        type=int,
+        default=10,
+        help="Maximum task steps; cloud sessions poll provider stepCount and stop at the cap",
+    )
     browser.add_argument("--max-duration-sec", type=int, default=300)
     browser.add_argument("--max-cost-usd", type=float, default=0.25)
 
     doctor = sub.add_parser("doctor")
+    doctor.add_argument("--global-install", action="store_true")
     doctor.add_argument("--json", action="store_true")
 
     cleanup = sub.add_parser("cleanup")
@@ -429,7 +436,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "doctor":
         from browser_fetch_router.doctor import run_doctor
-        return _emit("doctor", handler=run_doctor)
+        return _emit("doctor", handler=lambda: run_doctor(global_install=args.global_install))
 
     if args.command == "read-web":
         from browser_fetch_router.read_web import read_web

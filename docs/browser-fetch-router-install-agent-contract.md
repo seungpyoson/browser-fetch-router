@@ -76,11 +76,18 @@ Before marking install-agent changes ready:
 python3 -m pytest tests/browser_fetch_router/test_install_agent.py
 python3 -m pytest tests/browser_fetch_router
 git diff --check
+browser-fetch-router doctor --global-install --json
 ```
 
 Package installability must be checked from outside the repository with
 `pip install .` against the checkout path, followed by
 `browser-fetch-router --help`.
+
+The global install verifier reports the resolved shim path, symlink target when
+present, schema defaults, and doctor health. If the real global command does
+not match the reviewed package contract, it returns `stale_global_install` with
+a `pipx reinstall --force .` reinstall instruction before adapter smoke results
+are trusted.
 
 Contributor runs should leave generated virtualenvs, caches, bytecode, and
 package metadata ignored. A tracked-file path sweep should also report no
