@@ -12,7 +12,7 @@ from browser_fetch_router.paths import state_dir
 from browser_fetch_router.schema import envelope
 from browser_fetch_router.session import current_session_id
 
-HOSTED_BROWSER_MIN_COST_USD = 0.25
+HOSTED_BROWSER_DEFAULT_COST_USD = 0.25
 
 _PROVIDER_CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
@@ -206,7 +206,7 @@ def _cost_cap_exceeded(
 def _hosted_cost_cap(value: float) -> float | None:
     if not isfinite(value) or value < 0:
         return None
-    return max(HOSTED_BROWSER_MIN_COST_USD, float(value))
+    return float(value)
 
 
 def _reserve_hosted_cost(
@@ -293,7 +293,7 @@ def run_interactive_browser(
     confirm_irreversible: str | None = None,
     max_steps: int = 10,
     max_duration_sec: int = 300,
-    max_cost_usd: float = HOSTED_BROWSER_MIN_COST_USD,
+    max_cost_usd: float = HOSTED_BROWSER_DEFAULT_COST_USD,
 ) -> dict[str, Any]:
     """Dispatch an interactive browser task.
 

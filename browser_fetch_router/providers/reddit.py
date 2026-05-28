@@ -76,7 +76,7 @@ def _shape_reddit_listing(data: Any) -> str:
         if isinstance(children, list):
             subreddit = _first_text(children, "subreddit")
             heading = f"# r/{subreddit}" if subreddit else "# Reddit listing"
-            lines.append(heading)
+            post_lines: list[str] = []
             for child in children[:5]:
                 post = (child or {}).get("data", {}) or {}
                 title = post.get("title")
@@ -91,13 +91,16 @@ def _shape_reddit_listing(data: Any) -> str:
                     meta.append(f"score {score}")
                 if comments is not None:
                     meta.append(f"{comments} comments")
-                lines.append(f"\n## {title}")
-                lines.append(f"{' | '.join(meta)}")
+                post_lines.append(f"\n## {title}")
+                post_lines.append(f"{' | '.join(meta)}")
                 if permalink:
-                    lines.append(f"https://www.reddit.com{permalink}")
+                    post_lines.append(f"https://www.reddit.com{permalink}")
                 selftext = post.get("selftext") or ""
                 if selftext:
-                    lines.append(selftext)
+                    post_lines.append(selftext)
+            if post_lines:
+                lines.append(heading)
+                lines.extend(post_lines)
             return "\n".join(lines).strip()
     if isinstance(data, list) and len(data) >= 1:
         post_node = (data[0] or {}).get("data", {}).get("children", [])

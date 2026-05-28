@@ -242,6 +242,16 @@ def test_reddit_dict_listing_shapes_subreddit_posts():
     assert client.requested == ["https://www.reddit.com/r/python.json?limit=3"]
 
 
+def test_reddit_dict_empty_listing_reports_insufficient_content():
+    client = _TextClient(json.dumps({"data": {"children": []}}))
+
+    result = reddit.fetch("https://www.reddit.com/r/empty/", {"http_client": client})
+
+    assert result["status"] == "insufficient_content"
+    assert result["error"] == {"code": "reddit_empty_listing"}
+    assert result["content_markdown"] is None
+
+
 def test_reddit_post_comment_list_shape_still_works():
     payload = [
         {

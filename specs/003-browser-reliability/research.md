@@ -62,6 +62,9 @@
 - Red TDD test `test_browser_use_cloud_stops_running_session_when_step_cap_is_reached` reproduced the gap by returning `browser_use_cloud_empty_output` after an over-cap running session instead of stopping the provider session with a step-cap error.
 - The fix enforces `--max-steps` by polling provider `stepCount`, calling the Browser Use Cloud stop endpoint for nonterminal sessions at the cap, and preserving any stop-response `totalCostUsd` so the ledger records billed spend on provider failure.
 - Red TDD test `test_cloud_provider_exception_releases_reservation` reproduced an exception path that could escape while a preflight reservation was live; the fix releases the reservation and returns a structured `provider_unavailable/browser_use_cloud_exception` envelope.
+- Claude final-branch review found two real edge cases: dict-style Reddit listings with no titled children returned `ok` with only `# Reddit listing`, and explicit hosted-browser caps below the default were silently raised to `0.25`.
+- Red TDD tests `test_reddit_dict_empty_listing_reports_insufficient_content` and `test_cloud_respects_explicit_cost_cap_below_default` reproduced the gaps; the fixes preserve `reddit_empty_listing` structured failure and pass the caller's finite nonnegative `--max-cost-usd` value through unchanged.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_interactive.py -q` exited `0` with `37 passed`.
 - `python3 -m pytest tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py -q` exited `0` with `47 passed`.
 - `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_read_user_tabs.py tests/browser_fetch_router/test_interactive.py tests/browser_fetch_router/test_browser_use_cloud.py tests/browser_fetch_router/test_cost.py tests/browser_fetch_router/test_cli_contract.py tests/browser_fetch_router/test_install_agent.py -q` exited `0` with `159 passed`.
 
@@ -87,7 +90,7 @@
 
 ## Evidence: current branch verification after reliability fixes
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `743 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `745 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
 - `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
 - Secret-pattern sweep found no live secrets; the only match was an intentional fake audit fixture.
@@ -107,7 +110,7 @@
 - Registry cache currently has `PARALLEL_API_KEY` and `BROWSER_USE_API_KEY` present. Credentialed Browser Use Cloud live smoke exited `0` with `status: ok`, `provider: browser-use-cloud`, content containing `"Example Domain"`, `remote_status: stopped`, `step_count: 0`, and `total_cost_usd: 0.004498000000000000261901611509`. Unit/contract tests cover Browser Use Cloud success, auth failure, max-step stop, timeout, exception release, reported-cost recording, and cumulative caps.
 - Latest TDD follow-up at `75ec0df` reclassified a missing global shim as a `command_mismatches` entry instead of `schema_mismatches`; the red public-CLI regression test failed before the one-line fix and passed afterward. Slice review approvals were obtained from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok. Final whole-feature T046 remains pending until final post-implementation reviews are complete at the latest head.
 
-The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `743 passed` count because later user-story and review-follow-up tests were added after those captures.
+The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `745 passed` count because later user-story and review-follow-up tests were added after those captures.
 
 ## Evidence: #58 read-web short-valid page reliability
 
