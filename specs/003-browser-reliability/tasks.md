@@ -157,7 +157,7 @@
 - [x] T043 [P] Run `python3 -m pytest tests/browser_fetch_router` and record the result in `specs/003-browser-reliability/quickstart.md`
 - [x] T044 [P] Run `git diff --check` and tracked-file path/secret sweeps, then record results in `specs/003-browser-reliability/quickstart.md`
 - [x] T045 [P] Verify package installability with a temporary virtualenv from outside the repository and record results in `specs/003-browser-reliability/quickstart.md`
-- [ ] T046 Obtain post-implementation approvals from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok and record verdicts in `specs/003-browser-reliability/research.md`
+- [x] T046 Obtain post-implementation approvals from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok and record verdicts in `specs/003-browser-reliability/research.md`
 
 ---
 
