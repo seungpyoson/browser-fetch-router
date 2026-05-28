@@ -44,14 +44,14 @@
 
 - [x] T007 [P] [US1] Add a failing quality-gate test for short valid public page content in `tests/browser_fetch_router/test_browser_reliability_providers.py`
 - [x] T008 [P] [US1] Add a failing CLI regression test for `read-web https://example.com --json --no-cache` in `tests/browser_fetch_router/test_browser_reliability_cli.py`
-- [ ] T009 [P] [US1] Add failing Parallel v1 Extract success and error-shape tests in `tests/browser_fetch_router/test_browser_reliability_providers.py`
+- [x] T009 [P] [US1] Add failing Parallel v1 Extract success and error-shape tests in `tests/browser_fetch_router/test_browser_reliability_providers.py`
 - [x] T010 [P] [US1] Add a failing acceptance test that `example-read-network` passes under `--include-network` in `tests/browser_fetch_router/test_browser_reliability_cli.py`
 
 ### Implementation for User Story 1
 
 - [x] T011 [US1] Implement short-valid content classification and evidence in `browser_fetch_router/quality.py`
 - [x] T012 [US1] Preserve blocked/login/captcha/empty structured failures while applying the new quality evidence in `browser_fetch_router/quality.py`
-- [ ] T013 [US1] Update the Parallel adapter to the current Extract API URL, auth header, request body, and response parser in `browser_fetch_router/providers/parallel.py`
+- [x] T013 [US1] Update the Parallel adapter to the current Extract API URL, auth header, request body, and response parser in `browser_fetch_router/providers/parallel.py`
 - [x] T014 [US1] Update paid fallback and acceptance case expectations for the corrected public read path in `browser_fetch_router/read_web.py` and `browser_fetch_router/acceptance.py`
 - [x] T015 [US1] Document the `read-web` short-valid and paid fallback contract in `docs/browser-fetch-router-read-web-contract.md`
 

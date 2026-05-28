@@ -7,8 +7,17 @@ import sys
 import time
 from typing import Any, Callable
 
+PAID_FALLBACK_SMOKE_URL = "https://raw.githubusercontent.com/octocat/Hello-World/master/README"
+DEFAULT_ACCEPTANCE_TIMEOUT_SECONDS = 30
+PAID_ACCEPTANCE_TIMEOUT_SECONDS = 90
 
-def _run(args: list[str], *, env: dict[str, str] | None = None) -> tuple[int, str, str]:
+
+def _run(
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    timeout: int = DEFAULT_ACCEPTANCE_TIMEOUT_SECONDS,
+) -> tuple[int, str, str]:
     cmd = [sys.executable, "-m", "browser_fetch_router", *args]
     # Merge caller env into a fresh `os.environ` snapshot rather than
     # using `env or {**os.environ}`. The truthiness pattern silently
@@ -26,13 +35,18 @@ def _run(args: list[str], *, env: dict[str, str] | None = None) -> tuple[int, st
         stderr=subprocess.PIPE,
         check=False,
         env=merged_env,
-        timeout=30,
+        timeout=timeout,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def assert_status(args: list[str], expected_status: str) -> dict[str, Any]:
-    code, out, err = _run(args)
+def assert_status(
+    args: list[str],
+    expected_status: str,
+    *,
+    timeout: int = DEFAULT_ACCEPTANCE_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    code, out, err = _run(args, timeout=timeout)
     try:
         payload = json.loads(out)
     except (ValueError, json.JSONDecodeError):
@@ -104,7 +118,15 @@ def run_acceptance(*, include_network: bool = False, include_paid: bool = False)
         cases.append((
             "parallel-paid-extract",
             lambda: assert_status(
-                ["read-web", "https://example.com/", "--allow-paid", "--json"], "ok"
+                [
+                    "read-web",
+                    PAID_FALLBACK_SMOKE_URL,
+                    "--allow-paid",
+                    "--json",
+                    "--no-cache",
+                ],
+                "ok",
+                timeout=PAID_ACCEPTANCE_TIMEOUT_SECONDS,
             ),
         ))
 

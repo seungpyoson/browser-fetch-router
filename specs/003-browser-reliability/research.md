@@ -87,3 +87,19 @@
 - `git diff --check` exited `0`.
 - `python3 -m pytest tests/browser_fetch_router -q` in the sandbox failed only at `test_Q_run_cleanup_real_subprocess_lands_in_cleaned_bucket` because macOS denied `psutil` process enumeration via `sysctl`.
 - Escalated rerun of `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `704 passed`.
+
+## Evidence: #59 Parallel paid fallback contract
+
+**Baseline before fix**:
+
+- A credentialed request to the previous adapter contract used `https://api.parallel.ai/v1beta/extract`, bearer authentication, and `{"url": ...}`; Parallel returned HTTP `422` with validation-error details. This proved API/request-shape drift rather than an absent credential.
+- With the corrected fallback-eligible URL but no key, `HOME=/private/tmp/bfr-home-fallback-no-key python3 -m browser_fetch_router read-web https://raw.githubusercontent.com/octocat/Hello-World/master/README --allow-paid --json --no-cache --max-chars 500` exited `3` with `status: quota_or_key_missing`, `provider: parallel`, and `error.code: parallel_key_missing`, proving the URL reaches the paid fallback branch without exposing a key.
+
+**Green evidence after fix**:
+
+- Unit/provider tests assert `POST https://api.parallel.ai/v1/extract`, `x-api-key`, body `{"urls": [...], "objective": ...}`, full-content parsing, excerpt parsing, 4xx details, 429 details, missing-key short-circuit, malformed JSON, empty result, and URL-specific Extract errors.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_read_web.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_acceptance_contract.py -q` exited `0` with `51 passed`.
+- Using an ephemeral environment variable for a newly created test key, `HOME=/private/tmp/bfr-paid-smoke-home python3 -m browser_fetch_router read-web https://raw.githubusercontent.com/octocat/Hello-World/master/README --allow-paid --json --no-cache --max-chars 500` exited `0` with `status: ok`, `provider: parallel`, and non-empty content.
+- In the same ephemeral key session, `HOME=/private/tmp/bfr-paid-smoke-home python3 -m browser_fetch_router test-acceptance --include-network --include-paid --json` exited `0`; `19` cases passed, `0` failed, and `parallel-paid-extract` returned `ok`.
+- An exact-secret worktree scan using the key supplied only through stdin found `0` matches.
+- `git diff --check` exited `0`.

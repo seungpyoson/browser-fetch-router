@@ -24,7 +24,7 @@ Expected: all valid public-page commands return `status: ok`. Unsafe, blocked, l
 Supply the key through the environment. Do not write it to files.
 
 ```bash
-PARALLEL_API_KEY=... browser-fetch-router read-web https://example.com --allow-paid --json --no-cache
+PARALLEL_API_KEY=... browser-fetch-router read-web https://raw.githubusercontent.com/octocat/Hello-World/master/README --allow-paid --json --no-cache
 PARALLEL_API_KEY=... browser-fetch-router test-acceptance --include-network --include-paid --json
 ```
 

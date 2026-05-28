@@ -22,7 +22,9 @@ browser-fetch-router read-web <url> --json [--allow-paid] [--no-cache] [--max-ch
 - Short but valid public pages return `ok` when they contain clear title/body content and no blocked signals.
 - Unsafe URLs, login walls, captcha/JS challenges, blocked pages, and true empty pages remain structured non-OK results.
 - Paid fallback is attempted only for eligible generic web insufficient-content results and only when `--allow-paid` is present.
-- Parallel fallback uses the current Extract API request shape and parses current result envelopes.
+- Parallel fallback uses `POST https://api.parallel.ai/v1/extract` with
+  `x-api-key`, `urls`, and `objective`, then parses `results[].full_content`,
+  `results[].excerpts`, and URL-specific `errors[]` envelopes.
 - Reddit listing URLs and post/comment URLs both return shaped markdown when Reddit JSON contains usable content.
 
 ## Required Structured Failures
@@ -46,6 +48,6 @@ browser-fetch-router test-acceptance --include-network --json
 Paid fallback smoke, with a real key supplied by environment:
 
 ```bash
-PARALLEL_API_KEY=... browser-fetch-router read-web https://example.com --allow-paid --json --no-cache
+PARALLEL_API_KEY=... browser-fetch-router read-web https://raw.githubusercontent.com/octocat/Hello-World/master/README --allow-paid --json --no-cache
 browser-fetch-router test-acceptance --include-network --include-paid --json
 ```

@@ -53,6 +53,15 @@ passes `--allow-paid` and the configured cost policy allows the request. API
 keys must be supplied through documented environment variables only; they must
 not appear in docs, adapters, tests, logs, or issues.
 
+The Parallel call uses the current Extract API contract:
+
+- `POST https://api.parallel.ai/v1/extract`
+- `x-api-key: $PARALLEL_API_KEY`
+- JSON body with `urls: [target_url]` and an extraction `objective`
+- success content from `results[].full_content` or joined `results[].excerpts`
+- structured failures for HTTP errors, rate limits, invalid JSON, empty
+  results, missing keys, and URL-specific `errors[]` entries
+
 ## Verification
 
 Minimum verification for this contract:
