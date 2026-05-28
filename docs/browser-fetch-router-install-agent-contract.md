@@ -54,7 +54,8 @@ Default multi-install reports Kimi as:
   "agent": "kimi",
   "status": "skipped",
   "skip_reason": {
-    "code": "default_disabled"
+    "code": "default_disabled",
+    "message": "Kimi is supported only by explicit opt-in because its brand skill root can change Claude/Codex inheritance behavior."
   }
 }
 ```
@@ -63,7 +64,9 @@ Default multi-install reports Kimi as:
 
 `--adapter-path` remains an explicit escape hatch for project-local or custom
 agent layouts. The destination basename must be `SKILL.md`; directory paths and
-other filenames are rejected before writing.
+other filenames are rejected before writing. `--adapter-path` cannot be
+combined with `--all` or `--select`; custom destinations are only valid for an
+explicit single-agent install.
 
 ## Contributor Verification
 

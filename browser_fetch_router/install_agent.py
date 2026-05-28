@@ -268,34 +268,46 @@ def install_agent(
     warnings = []
     if not adapter_path and contract.explicit_warning:
         warnings.append(contract.explicit_warning)
-    if not adapter_path and contract.create_root_on_explicit:
-        dest.parent.parent.mkdir(parents=True, exist_ok=True)
-    if not adapter_path and not dest.parent.parent.exists():
+    try:
+        if not adapter_path and contract.create_root_on_explicit:
+            dest.parent.parent.mkdir(parents=True, exist_ok=True)
+        if not adapter_path and not dest.parent.parent.exists():
+            return envelope(
+                command="install-agent",
+                status="tool_setup_failed",
+                error={
+                    "code": "agent_adapter_path_unverified",
+                    "message": f"Default adapter directory {dest.parent.parent} not found. Provide --adapter-path if your agent uses a different location.",
+                },
+            )
+        if dest.exists() and not force:
+            return envelope(
+                command="install-agent",
+                status="tool_setup_failed",
+                error={"code": "adapter_exists", "message": "Pass --force to overwrite"},
+                artifacts=[{"path": str(dest)}],
+            )
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Route through atomic_write_bytes so a partial write (signal mid-
+        # call, disk-full, permission edge) cannot leave a half-written
+        # SKILL.md that the next agent invocation parses as truncated YAML
+        # / markdown. Mode 0o644 keeps SKILL.md operator-readable — it is
+        # not a credential file (the persistence-contract 0o600 default is
+        # for internal state, not operator-facing config). Class fix r15-03
+        # (no `path.write_text` / `path.write_bytes` in production code;
+        # static guard locks the invariant in).
+        atomic_write_bytes(dest, adapter_text(agent).encode("utf-8"), mode=0o644)
+    except OSError as exc:
         return envelope(
             command="install-agent",
             status="tool_setup_failed",
             error={
-                "code": "agent_adapter_path_unverified",
-                "message": f"Default adapter directory {dest.parent.parent} not found. Provide --adapter-path if your agent uses a different location.",
+                "code": "adapter_write_failed",
+                "message": str(exc),
+                "type": type(exc).__name__,
             },
-        )
-    if dest.exists() and not force:
-        return envelope(
-            command="install-agent",
-            status="tool_setup_failed",
-            error={"code": "adapter_exists", "message": "Pass --force to overwrite"},
             artifacts=[{"path": str(dest)}],
         )
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    # Route through atomic_write_bytes so a partial write (signal mid-
-    # call, disk-full, permission edge) cannot leave a half-written
-    # SKILL.md that the next agent invocation parses as truncated YAML
-    # / markdown. Mode 0o644 keeps SKILL.md operator-readable — it is
-    # not a credential file (the persistence-contract 0o600 default is
-    # for internal state, not operator-facing config). Class fix r15-03
-    # (no `path.write_text` / `path.write_bytes` in production code;
-    # static guard locks the invariant in).
-    atomic_write_bytes(dest, adapter_text(agent).encode("utf-8"), mode=0o644)
     if verification is None:
         verification_fn = verification_runner or _run_verification
         verification = verification_fn()

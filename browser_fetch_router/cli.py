@@ -147,10 +147,17 @@ def _emit(
         # We've audited and emitted the envelope. Exit cleanly with the
         # POSIX SIGINT code instead of letting KeyboardInterrupt propagate
         # (which would print a traceback to stderr).
-        return STATUS_EXIT_CODES[payload["status"]]
+        return _exit_code_for_payload(payload)
     if exit_code_fn is not None:
         return exit_code_fn(payload)
-    return STATUS_EXIT_CODES[payload["status"]]
+    return _exit_code_for_payload(payload)
+
+
+def _exit_code_for_payload(payload: dict) -> int:
+    return STATUS_EXIT_CODES.get(
+        payload.get("status"),
+        STATUS_EXIT_CODES["internal_error"],
+    )
 
 
 def _serialize_or_internal_error(

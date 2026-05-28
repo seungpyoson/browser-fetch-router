@@ -38,7 +38,7 @@ Expected behavior:
 - Installs only requested agents.
 - Kimi is installed when explicitly selected, not skipped.
 - Invalid names remain usage errors.
-- `--adapter-path` remains mutually exclusive with `--select`.
+- `--adapter-path` remains mutually exclusive with `--all` and `--select`.
 
 ### Default Multi-Install
 

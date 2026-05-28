@@ -98,13 +98,43 @@ def test_install_plan_verifies_help_and_doctor():
 def test_safe_env_for_subprocess_drops_agent_keys(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret-anthropic")
     monkeypatch.setenv("OPENAI_API_KEY", "secret-openai")
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-gemini")
+    monkeypatch.setenv("KIMI_API_KEY", "secret-kimi")
     monkeypatch.setenv("HOME", "/tmp/x")
+    monkeypatch.setenv("PATH", "/tmp/bin")
     from browser_fetch_router.install_agent import _safe_env
 
     env = _safe_env()
     assert "ANTHROPIC_API_KEY" not in env
     assert "OPENAI_API_KEY" not in env
+    assert "GEMINI_API_KEY" not in env
+    assert "KIMI_API_KEY" not in env
     assert env.get("HOME") == "/tmp/x"
+    assert env.get("PATH") == "/tmp/bin"
+
+
+def test_run_verification_passes_sanitized_env_to_subprocess(monkeypatch):
+    from browser_fetch_router import install_agent as module
+
+    captured_envs = []
+    safe_env = {"HOME": "/tmp/safe-home", "PATH": "/tmp/safe-bin"}
+    monkeypatch.setattr(module, "_safe_env", lambda: safe_env)
+
+    class Completed:
+        returncode = 0
+        stdout = "{}"
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        captured_envs.append(kwargs["env"])
+        return Completed()
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module._run_verification()
+
+    assert result["success"] is True
+    assert captured_envs == [safe_env, safe_env, safe_env]
 
 
 def test_install_agent_all_skips_kimi_and_installs_documented_defaults(
@@ -276,6 +306,31 @@ def test_install_agents_does_not_duplicate_results_under_evidence(
     assert result["evidence"] is None
 
 
+def test_install_agent_write_failure_returns_tool_setup_failed(tmp_path, monkeypatch):
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
+    module.destination_for("codex").parent.parent.mkdir(parents=True)
+    monkeypatch.setattr(
+        module,
+        "atomic_write_bytes",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_verification",
+        lambda: (_ for _ in ()).throw(AssertionError("verification should not run")),
+    )
+
+    result = module.install_agent("codex", force=True)
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "adapter_write_failed"
+    assert result["error"]["type"] == "OSError"
+    assert "disk full" in result["error"]["message"]
+    assert result["artifacts"] == [{"path": str(module.destination_for("codex"))}]
+
+
 def test_install_agents_reuses_single_verification_result(tmp_path, monkeypatch):
     from browser_fetch_router import install_agent as module
 
@@ -299,6 +354,25 @@ def test_install_agents_reuses_single_verification_result(tmp_path, monkeypatch)
         entry["evidence"]["verification"]["success"]
         for entry in result["results"]
     ] == [True, True]
+
+
+def test_install_agents_propagates_verification_failure(tmp_path, monkeypatch):
+    from browser_fetch_router import install_agent as module
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-root"))
+    module.destination_for("codex").parent.parent.mkdir(parents=True)
+    verification = {
+        "success": False,
+        "failures": [{"cmd": ["browser-fetch-router", "doctor"], "returncode": 1}],
+    }
+    monkeypatch.setattr(module, "_run_verification", lambda: verification)
+
+    result = module.install_agents(["codex"], force=True)
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["results"][0]["status"] == "tool_setup_failed"
+    assert result["results"][0]["error"]["code"] == "post_install_verification_failed"
+    assert {"verification": verification} in result["results"][0]["artifacts"]
 
 
 def test_explicit_pi_cli_writes_documented_default(capsys, tmp_path, monkeypatch):
@@ -452,7 +526,9 @@ def test_install_agents_all_writes_every_default_destination(tmp_path, monkeypat
     assert [entry["agent"] for entry in result["results"]] == module.AGENTS
     assert all(entry["status"] == "ok" for entry in result["results"])
     for agent in module.AGENTS:
-        assert module.destination_for(agent).read_text(encoding="utf-8")
+        assert module.destination_for(agent).read_text(
+            encoding="utf-8"
+        ) == module.adapter_text(agent)
 
 
 def test_install_agents_select_writes_subset_only(tmp_path, monkeypatch):
@@ -512,6 +588,29 @@ def test_install_agent_all_rejects_adapter_path(capsys, tmp_path):
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "usage_error"
     assert payload["error"]["code"] == "usage_error"
+
+
+def test_install_agent_select_rejects_adapter_path(capsys, tmp_path):
+    from browser_fetch_router import cli
+    from browser_fetch_router.status import STATUS_EXIT_CODES
+
+    rc = None
+    try:
+        rc = cli.main([
+            "install-agent",
+            "--select",
+            "claude,codex",
+            "--adapter-path",
+            str(tmp_path / "SKILL.md"),
+            "--json",
+        ])
+    except SystemExit as exc:
+        rc = exc.code
+
+    assert rc == STATUS_EXIT_CODES["usage_error"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "usage_error"
+    assert "--adapter-path cannot be combined" in payload["error"]["message"]
 
 
 def test_install_agent_select_cli_groups_requested_agents(capsys, monkeypatch):
@@ -614,6 +713,40 @@ def test_install_agent_contract_docs_include_support_matrix_and_caveats():
     assert "inheritance" in doc
     assert "--adapter-path" in doc
     assert "SKILL.md" in doc
+
+
+def test_install_agent_contract_docs_pin_skip_reason_and_adapter_path_modes():
+    public_doc = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
+        encoding="utf-8"
+    )
+    cli_contract = Path(
+        "specs/002-install-agent-readiness/contracts/install-agent-cli.md"
+    ).read_text(encoding="utf-8")
+
+    for doc in [public_doc, cli_contract]:
+        assert '"code": "default_disabled"' in doc
+        assert '"message": "Kimi is supported only by explicit opt-in' in doc
+        assert "--adapter-path" in doc
+        assert "--all" in doc
+        assert "--select" in doc
+        assert (
+            "cannot be" in doc and "combined" in doc
+        ) or "mutually exclusive" in doc
+
+
+def test_emit_unknown_status_uses_internal_error_exit_code(capsys):
+    from browser_fetch_router import cli
+    from browser_fetch_router.status import STATUS_EXIT_CODES
+
+    rc = cli._emit(
+        "unit-test",
+        handler=lambda: {"command": "unit-test", "status": "brand_new_status"},
+        audit=False,
+    )
+
+    assert rc == STATUS_EXIT_CODES["internal_error"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "brand_new_status"
 
 
 def test_tracked_files_do_not_contain_contributor_local_paths():
