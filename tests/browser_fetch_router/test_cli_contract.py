@@ -121,6 +121,19 @@ def test_read_user_tabs_help_and_schema_include_cdp_setup_guidance():
     assert "--allow-remote-cdp" in read_tabs_schema["description"]
 
 
+def test_read_user_tabs_setup_cli_reports_managed_cdp_path():
+    result = run_cli("read-user-tabs", "setup", "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    setup = payload["evidence"]["setup"]
+    assert payload["evidence"]["launch_required"] is True
+    assert setup["cdp_base"] == "http://127.0.0.1:9222"
+    assert "--remote-debugging-port=9222" in setup["required_flags"]
+    assert "--user-data-dir=<temporary-profile>" in setup["required_flags"]
+
+
 def test_interactive_browser_help_and_schema_mark_provider_capabilities():
     from browser_fetch_router.schema import schema_payload
 
@@ -128,15 +141,16 @@ def test_interactive_browser_help_and_schema_mark_provider_capabilities():
 
     assert result.returncode == 0
     assert "cloud=live" in result.stdout
-    assert "browserbase/local=unavailable" in result.stdout
+    assert "browserbase=live" in result.stdout
+    assert "local" not in result.stdout.lower()
     assert "stepCount" in result.stdout
     interactive_schema = schema_payload()["output_schema"]["commandFlags"]["interactive-browser"]
     assert "cloud=live" in interactive_schema["description"]
-    assert "browserbase/local=unavailable" in interactive_schema["description"]
+    assert "browserbase=live" in interactive_schema["description"]
     capabilities = {item["id"]: item for item in interactive_schema["providerCapabilities"]}
     assert capabilities["cloud"]["status"] == "live"
-    assert capabilities["browserbase"]["status"] == "unavailable"
-    assert capabilities["local"]["status"] == "unavailable"
+    assert capabilities["browserbase"]["status"] == "live"
+    assert "local" not in capabilities
 
 
 def test_invalid_flag_is_structured_usage_error():
@@ -200,6 +214,10 @@ def test_doctor_global_install_verification_reports_current_shim(tmp_path):
     assert global_install["schema_version"] == "browser-fetch-router.v1"
     assert global_install["schema_defaults"]["interactive-browser.--max-cost-usd"] == 0.25
     assert global_install["schema_defaults"]["interactive-browser.--max-steps"] == 10
+    assert (
+        "interactive-browser.provider.local.status"
+        not in global_install["schema_defaults"]
+    )
     assert global_install["doctor_status"] == "ok"
 
 

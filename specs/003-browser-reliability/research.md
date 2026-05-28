@@ -42,13 +42,14 @@
 
 ## Decision: Interactive provider discovery must distinguish live providers from stubs
 
-**Rationale**: Browser Use Cloud has a live provider path with credentialed smoke evidence and cost ledger recording. Browserbase and local currently return `provider_unavailable` after credential/dependency checks, so exposing them as peer daily-use providers is misleading unless they are implemented.
+**Rationale**: Browser Use Cloud has a live provider path with credentialed smoke evidence and cost ledger recording. Browserbase must also run end to end through Stagehand/Browserbase when credentials are present. Local mode is not a daily-use provider choice because it would require additional model/provider credentials, so exposing it as a peer provider is misleading.
 
 **Alternatives considered**:
 
 - Keep stubs advertised and rely on runtime error: rejected because agents treat schema/help/adapters as capability truth.
-- Implement every provider immediately: allowed by spec, but only if it can be verified end to end with credentials/dependencies.
-- Mark unavailable providers clearly until implemented: chosen as the minimum truthful path.
+- Implement every provider immediately: chosen for Browserbase because Browserbase Model Gateway can avoid separate LLM-key sprawl.
+- Mark unavailable providers clearly until implemented: rejected for daily-use discovery because the stronger product bar is now that exposed choices must work.
+- Hide providers that cannot run safely: chosen for local mode until it has an end-to-end credential-safe path.
 
 **Reviewer follow-up evidence**:
 
@@ -90,7 +91,7 @@
 
 ## Evidence: current branch verification after reliability fixes
 
-- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `750 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
+- `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `757 passed` when run outside the macOS sandbox for the real-subprocess lifecycle test.
 - `git diff --check` exited `0`.
 - Tracked-file contributor-path sweep for local home path patterns found `0` matches.
 - Secret-pattern sweep found no live secrets; the only match was an intentional fake audit fixture.
@@ -112,7 +113,7 @@
 - Reviewer follow-up TDD added Browser Use Cloud coverage for missing session IDs, bytes request bodies, and best-effort stop/evidence after poll transport failures and poll HTTP error responses. The red tests failed before the provider fixes and passed afterward. Reviewer polish added test-only coverage for `lastStepSummary` fallback content, terminal empty-output errors, and preserved poll HTTP error detail. Spec evidence paths now use placeholders rather than contributor-machine absolute paths.
 - Final whole-feature T046 review gate at implementation head `9a9bfc4c2e6504c28cced83913bd85559b009b50` received approvals from Claude, Gemini, Kimi, DeepSeek, GLM, and Grok. Grok's first pass raised a `paid_disabled_sessions` table-creation concern; direct inspection showed `_ensure_schema()` already creates that table and `CostLedger.__init__` calls `_ensure_schema()` for fresh databases, so a Grok retry reviewed that disposition and approved. The only changes after this reviewed implementation head are process-recording docs for the T046 completion state.
 
-The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `750 passed` count because later user-story and review-follow-up tests were added after those captures.
+The #58 and #59 sections below are historical phase-local evidence captured at earlier branch states while the test suite was still growing. Their full-suite totals differ from the current `757 passed` count because later user-story and review-follow-up tests were added after those captures.
 
 ## Evidence: #58 read-web short-valid page reliability
 

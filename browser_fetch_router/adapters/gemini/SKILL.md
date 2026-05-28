@@ -40,6 +40,7 @@ Invoke the shared `browser-fetch-router` CLI for any web fetch, tab read, or int
 
 ## Constraints
 
-- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `browserbase` and `local` are unavailable until live launch support exists.
+- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `--provider browserbase` is live with `BROWSERBASE_API_KEY` and optional `BROWSERBASE_PROJECT_ID`. Both require hosted opt-in. Do not use local interactive mode as a daily-use provider.
+- If CDP is unreachable, run `browser-fetch-router read-user-tabs setup --json`; use `--launch` only to start an isolated temporary loopback profile.
 - Do not call Gemini's built-in `google_web_search` for arbitrary fetches when `browser-fetch-router` would route the same URL — the shared CLI gives you per-route quality gates and cost ledgering.
 - Never embed Gemini API keys in adapter scripts.

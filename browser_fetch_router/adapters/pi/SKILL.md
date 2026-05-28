@@ -41,6 +41,7 @@ Use the shared `browser-fetch-router` CLI for all web reads, user-tab reads, and
 
 ## Notes
 
-- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `browserbase` and `local` are unavailable until live launch support exists.
+- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `--provider browserbase` is live with `BROWSERBASE_API_KEY` and optional `BROWSERBASE_PROJECT_ID`. Both require hosted opt-in. Do not use local interactive mode as a daily-use provider.
+- If CDP is unreachable, run `browser-fetch-router read-user-tabs setup --json`; use `--launch` only to start an isolated temporary loopback profile.
 - Pi extensions in `~/.pi/agent/extensions/` may invoke the CLI; the CLI never reads pi config.
 - Never embed agent secrets in this adapter.

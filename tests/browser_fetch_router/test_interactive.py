@@ -2,70 +2,152 @@ from __future__ import annotations
 
 
 import builtins
+import sys
+import types
 
 
-def test_local_interactive_browser_reports_provider_unavailable(monkeypatch):
+def test_local_interactive_browser_is_not_a_daily_provider(monkeypatch):
     from browser_fetch_router import interactive
-
-    monkeypatch.setattr(interactive, "_local_browser_use_available", lambda: True)
 
     result = interactive.run_interactive_browser("read the current page", provider="local")
 
-    assert result["status"] == "tool_setup_failed"
-    assert result["error"]["code"] == "provider_unavailable"
-    assert "launch_pending" not in result["error"].get("message", "")
+    assert result["status"] == "usage_error"
+    assert result["error"]["code"] == "provider_not_advertised"
+    assert result["error"]["provider"] == "local"
 
 
-def test_local_unavailable_suggests_browserbase_when_browserbase_creds_present(monkeypatch):
+def test_default_provider_selects_browserbase_when_only_browserbase_creds_present(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
 
-    monkeypatch.setattr(interactive, "_local_browser_use_available", lambda: False)
-    monkeypatch.setenv("BROWSERBASE_API_KEY", "present")
-    monkeypatch.setenv("BROWSERBASE_PROJECT_ID", "present")
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {"provider": "browserbase", "session_id": "bb-1"},
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-default")
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
     monkeypatch.delenv("BROWSER_USE_API_KEY", raising=False)
 
-    result = interactive.run_interactive_browser("read the current page", provider="local")
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        allow_hosted_browser=True,
+        max_steps=4,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+    )
 
-    assert result["status"] == "tool_setup_failed"
-    assert result["error"]["code"] == "provider_unavailable"
-    assert result["evidence"]["provider"] == "local"
-    assert result["evidence"]["suggested_provider"] == "browserbase"
+    assert result["status"] == "ok"
+    assert result["provider"] == "browserbase"
+    assert calls == [{
+        "task": "Open https://example.com and report the page title",
+        "api_key": "bb_secret",
+        "project_id": None,
+        "model_name": "google/gemini-2.5-flash",
+        "max_steps": 4,
+        "max_duration_sec": 30,
+    }]
 
 
-def test_local_unavailable_suggests_cloud_when_only_cloud_creds_present(monkeypatch):
+def test_default_provider_selects_cloud_before_browserbase_when_cloud_creds_present(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
+    from browser_fetch_router.providers import browser_use_cloud
 
-    monkeypatch.setattr(interactive, "_local_browser_use_available", lambda: False)
-    monkeypatch.delenv("BROWSERBASE_API_KEY", raising=False)
-    monkeypatch.delenv("BROWSERBASE_PROJECT_ID", raising=False)
-    monkeypatch.setenv("BROWSER_USE_API_KEY", "present")
+    calls = []
 
-    result = interactive.run_interactive_browser("read the current page", provider="local")
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browser-use-cloud",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "bu-1",
+                "total_cost_usd": "0.01",
+            },
+        }
 
-    assert result["status"] == "tool_setup_failed"
-    assert result["error"]["code"] == "provider_unavailable"
-    assert result["evidence"]["provider"] == "local"
-    assert result["evidence"]["suggested_provider"] == "browser-use-cloud"
-
-
-def test_browserbase_after_opt_in_reports_provider_unavailable(monkeypatch):
-    from browser_fetch_router import interactive
-
-    monkeypatch.setenv("BROWSERBASE_API_KEY", "present")
-    monkeypatch.setenv("BROWSERBASE_PROJECT_ID", "present")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-default")
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
 
     result = interactive.run_interactive_browser(
-        "read the current page",
-        provider="browserbase",
+        "Open https://example.com and report the page title",
         allow_hosted_browser=True,
     )
 
-    assert result["status"] == "tool_setup_failed"
-    assert result["error"]["code"] == "provider_unavailable"
-    assert result["evidence"]["provider"] == "browserbase"
+    assert result["status"] == "ok"
+    assert result["provider"] == "browser-use-cloud"
+    assert calls[0]["api_key"] == "bu_secret"
 
 
-def test_interactive_provider_capabilities_mark_only_cloud_live():
+def test_browserbase_after_opt_in_dispatches_stagehand_with_cost_guard(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {"provider": "browserbase", "session_id": "bb-explicit"},
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-ok")
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+    monkeypatch.setenv("BROWSERBASE_PROJECT_ID", "bb_project")
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "ok"
+    assert result["provider"] == "browserbase"
+    assert result["content_markdown"] == "Page title: Example Domain"
+    assert calls == [{
+        "task": "Open https://example.com and report the page title",
+        "api_key": "bb_secret",
+        "project_id": "bb_project",
+        "model_name": "google/gemini-2.5-flash",
+        "max_steps": 3,
+        "max_duration_sec": 30,
+    }]
+
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-browserbase-ok") == 0
+
+
+def test_interactive_provider_capabilities_mark_cloud_and_browserbase_live_without_local():
     from browser_fetch_router import interactive
 
     capabilities = interactive.provider_capabilities()
@@ -73,10 +155,10 @@ def test_interactive_provider_capabilities_mark_only_cloud_live():
 
     assert by_id["cloud"]["status"] == "live"
     assert by_id["cloud"]["requires_hosted_opt_in"] is True
-    assert by_id["browserbase"]["status"] == "unavailable"
-    assert by_id["browserbase"]["unavailable_reason"] == "live_launch_not_implemented"
-    assert by_id["local"]["status"] == "unavailable"
-    assert by_id["local"]["unavailable_reason"] == "live_launch_not_implemented"
+    assert by_id["browserbase"]["status"] == "live"
+    assert by_id["browserbase"]["requires_hosted_opt_in"] is True
+    assert by_id["browserbase"]["requires"] == ["BROWSERBASE_API_KEY"]
+    assert "local" not in by_id
 
 
 def test_bare_open_url_is_tier_a():

@@ -43,4 +43,5 @@ Use the shared `browser-fetch-router` CLI for all web reads, user-tab reads, and
 
 - Default-deny URLs and hostname-sensitive tabs are redacted from listings.
 - Hosted-paid providers (Parallel Extract / Browserbase / Browser Use Cloud) require explicit opt-in flags.
-- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `browserbase` and `local` are unavailable until live launch support exists.
+- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `--provider browserbase` is live with `BROWSERBASE_API_KEY` and optional `BROWSERBASE_PROJECT_ID`. Both require hosted opt-in. Do not use local interactive mode as a daily-use provider.
+- If CDP is unreachable, run `browser-fetch-router read-user-tabs setup --json`; use `--launch` only to start an isolated temporary loopback profile.

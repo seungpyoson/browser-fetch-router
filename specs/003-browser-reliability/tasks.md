@@ -91,6 +91,7 @@
 - [x] T021 [P] [US3] Add a failing test for `cdp_unreachable` setup guidance in `tests/browser_fetch_router/test_read_user_tabs.py`
 - [x] T022 [P] [US3] Add failing adapter/docs contract assertions for loopback CDP setup guidance in `tests/browser_fetch_router/test_install_agent.py`
 - [x] T023 [P] [US3] Add a failing schema/help contract assertion for CDP setup discoverability in `tests/browser_fetch_router/test_cli_contract.py`
+- [x] T052 [P] [US3] Add failing managed CDP setup/launch tests in `tests/browser_fetch_router/test_read_user_tabs.py` and `tests/browser_fetch_router/test_cli_contract.py`
 
 ### Implementation for User Story 3
 
@@ -98,6 +99,7 @@
 - [x] T025 [US3] Add CDP setup guidance to CLI help/schema in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
 - [x] T026 [US3] Add safe loopback CDP setup guidance to `README.md` and all adapter files under `browser_fetch_router/adapters/`
 - [x] T027 [US3] Validate the documented temporary Chrome CDP flow and record the commands in `specs/003-browser-reliability/quickstart.md`
+- [x] T053 [US3] Add `read-user-tabs setup` and `setup --launch` as an explicit managed temporary loopback CDP path in `browser_fetch_router/cli.py` and `browser_fetch_router/read_user_tabs.py`
 
 **Checkpoint**: User Story 3 is independently testable with a temporary browser profile.
 
@@ -107,22 +109,27 @@
 
 **Goal**: `interactive-browser` only advertises providers as daily-use ready when they have a real end-to-end execution path.
 
-**Independent Test**: Browser Use Cloud live smoke returns `status: ok`; Browserbase/local either pass real smokes or are consistently marked unavailable/pending in schema, help, docs, and adapters.
+**Independent Test**: Browser Use Cloud and Browserbase live smokes return `status: ok`; local is not advertised as a daily-use provider unless it has a real end-to-end execution path.
 
 ### Tests for User Story 4
 
 - [x] T028 [P] [US4] Add failing provider capability schema tests for live versus unavailable providers in `tests/browser_fetch_router/test_interactive.py`
 - [x] T029 [P] [US4] Add failing Browser Use Cloud success/error contract tests in `tests/browser_fetch_router/test_interactive.py`
 - [x] T030 [P] [US4] Add failing docs/adapters assertions for provider truthfulness in `tests/browser_fetch_router/test_install_agent.py`
+- [x] T047 [P] [US4] Add failing Browserbase dispatch, default-selection, and capability tests in `tests/browser_fetch_router/test_interactive.py` and `tests/browser_fetch_router/test_cli_contract.py`
+- [x] T048 [P] [US4] Add failing Browserbase Stagehand provider success/error tests in `tests/browser_fetch_router/test_browserbase_stagehand.py`
 
 ### Implementation for User Story 4
 
 - [x] T031 [US4] Add or consolidate interactive provider capability metadata in `browser_fetch_router/interactive.py`
 - [x] T032 [US4] Ensure Browser Use Cloud execution, cost cap handling, and cost ledger recording are covered in `browser_fetch_router/interactive.py` and `browser_fetch_router/providers/browser_use_cloud.py`
-- [x] T033 [US4] Mark Browserbase and local providers as live only if implemented, otherwise unavailable/pending, in `browser_fetch_router/interactive.py`
+- [x] T033 [US4] Mark providers live only when implemented and remove local from daily-use discovery until it has a credential-safe live path in `browser_fetch_router/interactive.py`
 - [x] T034 [US4] Reflect provider capability truth in `browser_fetch_router/cli.py`, `browser_fetch_router/schema.py`, and `browser_fetch_router/schemas/v1.json`
 - [x] T035 [US4] Update interactive provider guidance in `README.md`, `docs/browser-fetch-router-interactive-browser-contract.md`, and all adapter files under `browser_fetch_router/adapters/`
 - [x] T036 [US4] Run a credentialed Browser Use Cloud smoke and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
+- [x] T049 [US4] Implement Browserbase-backed Stagehand execution, cleanup, error mapping, and hosted-cost guarding in `browser_fetch_router/interactive.py` and `browser_fetch_router/providers/browserbase_stagehand.py`
+- [x] T050 [US4] Remove local from daily-use provider choices until it has a credential-safe live path in `browser_fetch_router/cli.py`, schema, README, docs, and adapters
+- [ ] T051 [US4] Run a credentialed Browserbase smoke through the shared key registry and record redacted evidence in `specs/003-browser-reliability/quickstart.md`
 
 **Checkpoint**: User Story 4 is independently testable through schema/help and provider-specific CLI smokes.
 

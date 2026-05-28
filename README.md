@@ -41,6 +41,14 @@ browser-fetch-router interactive-browser "open example.com and summarize visible
 normal browser profile for CDP. The required flags are
 `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>`.
 
+The managed setup helper prints the safe path, and `--launch` starts the
+temporary loopback profile:
+
+```bash
+browser-fetch-router read-user-tabs setup --json
+browser-fetch-router read-user-tabs setup --launch --start-url https://example.com --json
+```
+
 ```bash
 BFR_TMPDIR="${TMPDIR:-/tmp}"
 BFR_CDP_PROFILE="$(mktemp -d "${BFR_TMPDIR%/}/bfr-cdp-profile.XXXXXX")"
@@ -62,9 +70,11 @@ export CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 - `--provider cloud` is live when `BROWSER_USE_API_KEY` is present and
   `--allow-hosted-browser` is supplied.
-- `--provider browserbase` and `--provider local` are explicit unavailable
-  providers until their live launch hooks are implemented. They return
-  `tool_setup_failed/provider_unavailable` instead of pretending to run.
+- `--provider browserbase` is live when `BROWSERBASE_API_KEY` is present and
+  `--allow-hosted-browser` is supplied. If your Browserbase account requires a
+  project id, also set `BROWSERBASE_PROJECT_ID`.
+- Local interactive mode is not advertised as a daily-use provider in this
+  build because it would require additional model/provider credentials.
 
 ## Agent Adapter Install
 

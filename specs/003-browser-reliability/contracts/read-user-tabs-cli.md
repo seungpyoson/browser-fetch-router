@@ -6,6 +6,8 @@
 browser-fetch-router read-user-tabs list --json
 browser-fetch-router read-user-tabs read <url-or-tab-id|active> --json --approval-scope <scope>
 browser-fetch-router read-user-tabs screenshot <url-or-tab-id|active> --json --approval-scope <scope> --output <path>
+browser-fetch-router read-user-tabs setup --json
+browser-fetch-router read-user-tabs setup --launch --start-url https://example.com --json
 ```
 
 ## CDP Setup Contract
@@ -25,6 +27,9 @@ The setup path must use:
 - `--user-data-dir=<temporary-profile>`
 - No default instruction to expose a normal browser profile
 - Do not use the normal browser profile for CDP setup
+
+`read-user-tabs setup --launch` must start a separate temporary Chrome profile
+on loopback CDP and return the PID, temporary profile directory, and CDP base.
 
 ## Approval Contract
 

@@ -8,10 +8,11 @@ cost ledgering stay in the CLI.
 
 - `--provider cloud` is live when `BROWSER_USE_API_KEY` is present and
   `--allow-hosted-browser` is supplied.
-- `--provider browserbase` is unavailable until live launch support exists.
-- `--provider local` is unavailable until live launch support exists.
-- Unavailable providers must return `tool_setup_failed` with
-  `error.code: provider_unavailable`.
+- `--provider browserbase` is live when `BROWSERBASE_API_KEY` is present and
+  `--allow-hosted-browser` is supplied. `BROWSERBASE_PROJECT_ID` is optional
+  account configuration and is passed through when present.
+- Local interactive mode is not a daily-use provider choice unless it gains an
+  end-to-end implementation without additional secret sprawl.
 
 ## Browser Use Cloud
 

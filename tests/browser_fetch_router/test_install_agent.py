@@ -721,9 +721,10 @@ def test_docs_and_adapters_expose_cdp_setup_without_embedded_secrets():
     for path in [*adapter_paths, *provider_doc_paths]:
         text = path.read_text()
         normalized = " ".join(text.split())
-        assert "provider cloud" in normalized and "live" in normalized, path
-        assert "browserbase" in normalized and "unavailable" in normalized, path
-        assert "local" in normalized and "unavailable" in normalized, path
+        normalized_lower = normalized.lower()
+        assert "provider cloud" in normalized_lower and "live" in normalized_lower, path
+        assert "browserbase" in normalized_lower and "live" in normalized_lower, path
+        assert "local" in normalized_lower and "daily-use provider" in normalized_lower, path
 
 
 def test_install_agent_contract_docs_include_support_matrix_and_caveats():

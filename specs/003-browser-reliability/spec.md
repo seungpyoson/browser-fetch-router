@@ -72,18 +72,18 @@ As an agent or user who wants to read already-open browser tabs, I need the CLI,
 
 ### User Story 4 - Interactive browser providers are truthful and live (Priority: P2)
 
-As an agent invoking `interactive-browser`, I need exposed providers to either run end-to-end or be clearly marked unavailable, so I do not treat stubbed provider names as reliable daily-use surfaces.
+As an agent invoking `interactive-browser`, I need exposed daily-use providers to run end-to-end, so I do not treat stubbed provider names as reliable surfaces.
 
-**Why this priority**: `interactive-browser --provider cloud` has live evidence with Browser Use Cloud credentials, but `local` and `browserbase` currently return `provider_unavailable` even when dependencies or credentials are present. The CLI/schema/help should not imply stubbed providers are ready.
+**Why this priority**: `interactive-browser --provider cloud` has live evidence with Browser Use Cloud credentials. Browserbase must also execute through Stagehand/Browserbase when credentials are present, while local must not remain advertised as a daily-use provider without a credential-safe live path.
 
-**Independent Test**: Run CLI tests for absent credentials, present Browser Use Cloud credentials, present Browserbase credentials, and local provider dependency states. Each advertised provider either completes a live smoke within the configured cost cap or is marked unavailable consistently in schema, help, docs, and adapter text.
+**Independent Test**: Run CLI tests for absent credentials, present Browser Use Cloud credentials, present Browserbase credentials, and local provider dependency states. Each advertised provider completes a live smoke within the configured limits. Providers that cannot run end-to-end are not advertised as daily-use provider choices.
 
 **Acceptance Scenarios**:
 
 1. **Given** a valid Browser Use Cloud API key and cost cap, **When** `interactive-browser --provider cloud "Open example.com and report the page title" --json` runs, **Then** it returns `status: ok`, content containing the page title, provider evidence, and ledger cost within the cap.
 2. **Given** no provider credentials, **When** `interactive-browser` is invoked noninteractively, **Then** it returns the existing approval or credential gate without launching a task.
-3. **Given** Browserbase credentials are present, **When** the Browserbase provider is advertised as available, **Then** the provider must execute a real Browserbase run; otherwise Browserbase must be marked unavailable/pending in all user-facing discovery surfaces.
-4. **Given** the local provider dependencies are installed, **When** the local provider is advertised as available, **Then** it must execute a real local browser-use run; otherwise local must be marked unavailable/pending in all user-facing discovery surfaces.
+3. **Given** Browserbase credentials are present, **When** the Browserbase provider is selected or auto-selected, **Then** the provider must execute a real Browserbase-backed run and return structured content or a provider-specific structured failure without a traceback.
+4. **Given** the local provider cannot run without additional model/provider credentials, **When** users inspect help/schema/adapters, **Then** local must not be advertised as a daily-use provider choice.
 
 ---
 
@@ -130,7 +130,7 @@ As a maintainer validating daily use after release, I need a repeatable global i
 - **FR-010**: `read-user-tabs` MUST continue requiring explicit approval scopes before reading content or screenshots.
 - **FR-011**: Interactive provider discovery MUST truthfully represent which providers are implemented and which are unavailable/pending.
 - **FR-012**: Browser Use Cloud interactive execution MUST have a live smoke path with credentials, cost evidence, and stable structured output.
-- **FR-013**: Browserbase and local interactive providers MUST either be implemented end-to-end or removed/marked unavailable from user-facing daily-use surfaces.
+- **FR-013**: Browserbase MUST be implemented end-to-end when credentials are present, and local interactive mode MUST be removed from daily-use provider choices unless it gains an end-to-end implementation without additional secret sprawl.
 - **FR-014**: Global install verification MUST detect stale pipx/global shims by comparing CLI/schema behavior against expected branch defaults.
 - **FR-015**: Agent adapters MUST remain thin and MUST call the shared CLI rather than embedding provider logic.
 - **FR-016**: Tests MUST follow TDD order for each bug fix: failing behavior test first, minimal implementation second, green verification third.
@@ -166,5 +166,5 @@ As a maintainer validating daily use after release, I need a repeatable global i
 - Target users are agents and maintainers using the installed CLI from outside the source repository.
 - Live vendor verification may use credentials already stored in the user's password manager, but secrets must remain outside specs, code, docs, logs, and issues.
 - CDP setup should use an isolated temporary browser profile and loopback-only remote debugging; normal browser profiles are not required.
-- This feature may classify a provider as unavailable/pending instead of implementing it when no safe end-to-end execution path exists.
+- This feature may remove a provider from daily-use discovery when no safe end-to-end execution path exists, but it must not keep a stubbed provider exposed as a peer choice.
 - Implementation remains scoped to reliability, discovery truthfulness, docs, adapters, tests, and verification for existing skill surfaces; new unrelated browser providers are out of scope.

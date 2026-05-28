@@ -325,6 +325,18 @@ def build_parser() -> argparse.ArgumentParser:
     tabs_shot.add_argument("--approval-scope")
     tabs_shot.add_argument("--persist-approval", action="store_true")
     tabs_shot.add_argument("--allow-remote-cdp", action="store_true")
+    tabs_setup = tabs_sub.add_parser("setup", description=cdp_setup_help)
+    tabs_setup.add_argument("--json", action="store_true")
+    tabs_setup.add_argument(
+        "--launch",
+        action="store_true",
+        help="Start a temporary loopback Chrome CDP profile",
+    )
+    tabs_setup.add_argument(
+        "--start-url",
+        default="about:blank",
+        help="Initial URL for --launch; http(s) only, or about:blank",
+    )
     tabs_revoke = tabs_sub.add_parser("revoke")
     tabs_revoke.add_argument("scope")
     tabs_revoke.add_argument("--json", action="store_true")
@@ -334,15 +346,19 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Interactive browser task runner. Provider capability truth: "
             "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; "
-            "browserbase/local=unavailable pending live launch support."
+            "browserbase=live with BROWSERBASE_API_KEY and --allow-hosted-browser; "
+            "optional BROWSERBASE_PROJECT_ID is passed through when present."
         ),
     )
     browser.add_argument("task")
     browser.add_argument("--json", action="store_true")
     browser.add_argument(
         "--provider",
-        choices=["local", "browserbase", "cloud"],
-        help="cloud=live; browserbase/local=unavailable pending live launch support",
+        choices=["browserbase", "cloud"],
+        help=(
+            "cloud=live with BROWSER_USE_API_KEY; "
+            "browserbase=live with BROWSERBASE_API_KEY and optional BROWSERBASE_PROJECT_ID"
+        ),
     )
     browser.add_argument("--allow-hosted-browser", action="store_true")
     browser.add_argument("--confirm-irreversible")
@@ -572,6 +588,7 @@ def _dispatch_read_user_tabs(args) -> dict:
         read_tab,
         revoke,
         screenshot_tab,
+        setup_cdp,
     )
     from browser_fetch_router.session import current_session_id
 
@@ -602,6 +619,8 @@ def _dispatch_read_user_tabs(args) -> dict:
             allow_remote_cdp=args.allow_remote_cdp,
             session_id=current_session_id(optional=True),
         )
+    if args.tabs_command == "setup":
+        return setup_cdp(launch=args.launch, start_url=args.start_url)
     if args.tabs_command == "revoke":
         return revoke(args.scope, session_id=current_session_id(optional=True))
     return envelope(

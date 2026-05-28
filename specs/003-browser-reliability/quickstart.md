@@ -35,6 +35,13 @@ Expected: paid fallback returns `status: ok` when eligible and records provider/
 Start a separate Chrome profile. Do not use the normal profile.
 
 ```bash
+browser-fetch-router read-user-tabs setup --json
+browser-fetch-router read-user-tabs setup --launch --start-url https://www.wikipedia.org --json
+```
+
+Manual equivalent:
+
+```bash
 export BFR_TMPDIR="<tmp-dir-outside-repo>"
 BFR_CDP_PROFILE="$(mktemp -d "${BFR_TMPDIR%/}/bfr-cdp-profile.XXXXXX")"
 BFR_SCREENSHOT="${BFR_TMPDIR%/}/bfr-active.png"
@@ -83,15 +90,14 @@ BROWSER_USE_API_KEY=... browser-fetch-router interactive-browser \
 
 Expected: `status: ok`, provider evidence, content containing the page title, step count within cap, and cost within cap.
 
-Browserbase/local provider checks:
+Browserbase provider and local-discovery checks:
 
 ```bash
 browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider browserbase --allow-hosted-browser --json
-browser-fetch-router interactive-browser "Open https://example.com and report the page title" --provider local --json
 browser-fetch-router schema --json
 ```
 
-Expected: each provider is either live with an end-to-end run or consistently marked unavailable/pending in schema/help/docs/adapters.
+Expected: Browserbase is live with an end-to-end run; local is absent from daily-use provider choices in schema/help/docs/adapters. If your Browserbase account requires project scoping, set `BROWSERBASE_PROJECT_ID` alongside `BROWSERBASE_API_KEY`.
 
 ## 6. Global Install Freshness
 
@@ -114,10 +120,10 @@ global command is stale, the verifier returns `stale_global_install` with a
 
 ## Latest Local Verification Evidence
 
-- `python3 -m pytest tests/browser_fetch_router -q` -> `750 passed`
+- `python3 -m pytest tests/browser_fetch_router -q` -> `757 passed`
 - `git diff --check` -> clean
 - Tracked-file contributor-path sweep -> no matches
-- Outside-repo temporary virtualenv install -> `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` passed
+- Outside-repo temporary virtualenv install -> `pip install .`, `browser-fetch-router --help`, `browser-fetch-router schema --json`, and `doctor --global-install --json` passed
 - Branch `doctor --global-install --json` verifier first detected the stale
   global shim (`interactive-browser.--max-cost-usd` default `0.05`, missing
   provider capability statuses). After `pipx install --force .`, the same
@@ -127,7 +133,8 @@ global command is stale, the verifier returns `stale_global_install` with a
   --json` returned `ok` with Kimi skipped/default-disabled by design, explicit
   `install-agent kimi --force --json` returned `ok`, and global `read-web
   https://example.com --json --no-cache` returned `ok` via `jina-reader`.
-- Registry-backed Parallel paid smoke -> `status: ok`, `provider: parallel`
+- Registry-backed current-package Parallel paid smoke -> `status: ok`, `provider: parallel`, content `Hello World!`
 - Live Reddit listing smoke -> `status: ok`, `provider: reddit-json`
-- Live temporary-profile CDP smoke -> `/json/version`, `read-user-tabs list`, `list --all`, `read active`, and `screenshot active` all passed; the temporary Chrome instance was closed afterward
-- Browser Use Cloud live smoke -> `status: ok`, `provider: browser-use-cloud`, content contained `"Example Domain"`, `remote_status: stopped`, `step_count: 0`, and `total_cost_usd: 0.004498000000000000261901611509`
+- Current-package managed CDP smoke -> `read-user-tabs setup --launch` waited for loopback CDP readiness, `list --show-all` returned the Example Domain tab, `read active` returned Example Domain content, and the temporary Chrome/profile were removed afterward
+- Current-package Browser Use Cloud live smoke -> `status: ok`, `provider: browser-use-cloud`, content contained `"Example Domain"`, `remote_status: stopped`, `step_count: 0`, and `total_cost_usd: 0.004490000000000000067446048746`
+- Browserbase live smoke -> blocked because the shared key registry/cache has no `BROWSERBASE_API_KEY` entry yet; `BROWSERBASE_PROJECT_ID` is supported as optional account config when present

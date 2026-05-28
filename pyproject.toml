@@ -15,6 +15,7 @@ requires-python = ">=3.11"
 # dependencies for nothing.
 dependencies = [
   "psutil>=5.9",
+  "stagehand>=3.20,<4",
   "websockets>=16,<17",
 ]
 

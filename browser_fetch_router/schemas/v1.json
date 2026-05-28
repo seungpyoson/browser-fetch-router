@@ -38,7 +38,7 @@
       "type": "object",
       "description": "Reads tabs from loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>; do not use the normal profile. --allow-remote-cdp is an explicit override for non-loopback endpoints.",
       "properties": {
-        "tabs_command": { "enum": ["list", "read", "screenshot", "revoke"] },
+        "tabs_command": { "enum": ["list", "read", "screenshot", "setup", "revoke"] },
         "--json": { "type": "boolean" },
         "--all": { "type": "boolean" },
         "--show-all": { "type": "boolean" },
@@ -46,17 +46,19 @@
         "--approval-scope": { "type": "string" },
         "--persist-approval": { "type": "boolean" },
         "--max-chars": { "type": "integer", "default": 20000 },
-        "--output": { "type": "string" }
+        "--output": { "type": "string" },
+        "--launch": { "type": "boolean", "description": "Start a temporary loopback Chrome CDP profile for read-user-tabs" },
+        "--start-url": { "type": "string", "default": "about:blank" }
       }
     },
     "interactive-browser": {
       "type": "object",
       "required": ["task"],
-      "description": "Interactive browser task runner. Provider capability truth: cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase/local=unavailable pending live launch support.",
+      "description": "Interactive browser task runner. Provider capability truth: cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase=live with BROWSERBASE_API_KEY and --allow-hosted-browser; optional BROWSERBASE_PROJECT_ID is passed through when present.",
       "properties": {
         "task": { "type": "string" },
         "--json": { "type": "boolean" },
-        "--provider": { "enum": ["local", "browserbase", "cloud"], "description": "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase/local=unavailable pending live launch support" },
+        "--provider": { "enum": ["browserbase", "cloud"], "description": "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; browserbase=live with BROWSERBASE_API_KEY and --allow-hosted-browser; optional BROWSERBASE_PROJECT_ID is passed through when present" },
         "--allow-hosted-browser": { "type": "boolean" },
         "--confirm-irreversible": { "type": "string" },
         "--max-steps": { "type": "integer", "default": 10, "description": "Maximum interactive task steps. Browser Use Cloud is enforced by polling provider stepCount and stopping nonterminal sessions at the cap." },

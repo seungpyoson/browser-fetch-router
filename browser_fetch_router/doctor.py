@@ -227,7 +227,6 @@ def _global_schema_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "interactive-browser.provider.browserbase.status": provider_statuses.get(
                 "browserbase"
             ),
-            "interactive-browser.provider.local.status": provider_statuses.get("local"),
         },
     }
 

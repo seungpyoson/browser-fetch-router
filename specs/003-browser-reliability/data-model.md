@@ -44,8 +44,8 @@ Represents user-facing setup guidance for `read-user-tabs`.
 
 Represents one `interactive-browser` provider's truthful status.
 
-- Fields: provider id (`local`, `browserbase`, `cloud`), display name, credential requirements, opt-in requirements, live status, unavailable reason, cost cap, smoke command.
-- Validation: providers marked live must have an end-to-end CLI smoke; providers not live must be marked unavailable/pending consistently.
+- Fields: provider id (`browserbase`, `cloud` for daily-use choices), display name, credential requirements, opt-in requirements, live status, cost cap, smoke command.
+- Validation: providers marked live must have an end-to-end CLI smoke; providers without a live path must be absent from daily-use discovery.
 - Relationships: drives CLI choices/help, schema metadata, docs, and adapter guidance.
 
 ## GlobalInstallState

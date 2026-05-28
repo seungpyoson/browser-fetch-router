@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 import re
 from decimal import Decimal, InvalidOperation
@@ -26,18 +27,10 @@ _PROVIDER_CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
         "id": "browserbase",
         "display_name": "Browserbase",
-        "status": "unavailable",
-        "requires": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"],
+        "status": "live",
+        "requires": ["BROWSERBASE_API_KEY"],
         "requires_hosted_opt_in": True,
-        "unavailable_reason": "live_launch_not_implemented",
-    },
-    {
-        "id": "local",
-        "display_name": "Local browser-use",
-        "status": "unavailable",
-        "requires": ["browser-use"],
-        "requires_hosted_opt_in": False,
-        "unavailable_reason": "live_launch_not_implemented",
+        "cost_cap_flag": "--max-cost-usd",
     },
 )
 
@@ -158,11 +151,19 @@ def _local_browser_use_available() -> bool:
 
 
 def _suggested_fallback() -> str | None:
-    if "BROWSERBASE_API_KEY" in os.environ and "BROWSERBASE_PROJECT_ID" in os.environ:
-        return "browserbase"
     if "BROWSER_USE_API_KEY" in os.environ:
         return "browser-use-cloud"
+    if "BROWSERBASE_API_KEY" in os.environ:
+        return "browserbase"
     return None
+
+
+def _default_provider() -> str:
+    if "BROWSER_USE_API_KEY" in os.environ:
+        return "cloud"
+    if "BROWSERBASE_API_KEY" in os.environ:
+        return "browserbase"
+    return "cloud"
 
 
 def _provider_unavailable(provider: str, tier: str, **evidence: Any) -> dict[str, Any]:
@@ -297,10 +298,9 @@ def run_interactive_browser(
 ) -> dict[str, Any]:
     """Dispatch an interactive browser task.
 
-    Live provider integration (browser-use local, Browserbase, Browser Use
-    Cloud) requires substantial vendor SDKs and careful sandboxing — Task 15
-    delivers the policy/precondition layer; the actual SDK launch hooks are
-    ready to wire in once the user opts into installing those dependencies.
+    Daily-use provider choices are limited to implemented hosted providers.
+    Local interactive mode is deliberately not advertised until it has a
+    credential-safe end-to-end launch path.
     """
     tier = classify_action(task)
     confirm = require_action_confirmation(
@@ -312,22 +312,15 @@ def run_interactive_browser(
         return confirm
 
     # Provider selection.
-    selected = provider or "local"
+    selected = provider or _default_provider()
     if selected == "local":
-        if not _local_browser_use_available():
-            return _provider_unavailable(
-                selected,
-                tier,
-                task_excerpt=task[:120],
-                suggested_provider=_suggested_fallback(),
-            )
-        return _provider_unavailable(
-            selected,
-            tier,
-            limits={
-                "max_steps": max_steps,
-                "max_duration_sec": max_duration_sec,
-                "max_cost_usd": max_cost_usd,
+        return envelope(
+            command="interactive-browser",
+            status="usage_error",
+            error={
+                "code": "provider_not_advertised",
+                "provider": "local",
+                "message": "Local interactive mode is not a daily-use provider in this build.",
             },
         )
 
@@ -343,18 +336,104 @@ def run_interactive_browser(
         )
 
     if selected == "browserbase":
-        env = provider_env({"BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"})
-        if "BROWSERBASE_API_KEY" not in env or "BROWSERBASE_PROJECT_ID" not in env:
+        env = provider_env({"BROWSERBASE_API_KEY"})
+        api_key = env.get("BROWSERBASE_API_KEY")
+        if not api_key:
             return envelope(
                 command="interactive-browser",
                 status="quota_or_key_missing",
                 error={"code": "browserbase_credentials_missing"},
             )
-        return _provider_unavailable(
-            selected,
-            tier,
-            credentials_present=True,
+        cost_cap = _hosted_cost_cap(max_cost_usd)
+        if cost_cap is None:
+            return envelope(
+                command="interactive-browser",
+                status="usage_error",
+                error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
+            )
+        session_id = current_session_id()
+        ledger = CostLedger(state_dir() / "cost.db")
+        reservation = _reserve_hosted_cost(
+            ledger,
+            session_id,
+            "browserbase",
+            cost_cap,
+            request_cap=cost_cap,
         )
+        if not reservation:
+            return _cost_cap_exceeded(
+                provider="browserbase",
+                session_id=session_id,
+                max_cost_usd=cost_cap,
+                reason="paid_session_disabled_or_cap_exceeded",
+            )
+        try:
+            browserbase_stagehand = importlib.import_module(
+                "browser_fetch_router.providers.browserbase_stagehand"
+            )
+            result = browserbase_stagehand.run_task(
+                task=task,
+                api_key=api_key,
+                project_id=os.environ.get("BROWSERBASE_PROJECT_ID"),
+                model_name="google/gemini-2.5-flash",
+                max_steps=max_steps,
+                max_duration_sec=max_duration_sec,
+            )
+        except Exception:
+            ledger.release(reservation)
+            return _provider_result_envelope({
+                "status": "provider_unavailable",
+                "provider": "browserbase",
+                "error": {"code": "browserbase_exception"},
+                "evidence": {
+                    "provider": "browserbase",
+                    "session_id": session_id,
+                    "reason": "provider_exception",
+                },
+            })
+        reported_cost = _reported_cost(result.get("evidence"))
+        if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
+            ledger.release(reservation)
+            ledger.disable_session(session_id, "provider_overrun")
+            return _cost_cap_exceeded(
+                provider="browserbase",
+                session_id=session_id,
+                max_cost_usd=cost_cap,
+                reason="provider_reported_overrun",
+                evidence={
+                    "reported_total_cost_usd": str(reported_cost),
+                    "provider_evidence": result.get("evidence"),
+                },
+            )
+        if result.get("status") != "ok":
+            if reported_cost is not None:
+                cost_error = _record_reported_hosted_cost(
+                    ledger=ledger,
+                    reservation=reservation,
+                    session_id=session_id,
+                    provider="browserbase",
+                    reported_cost=reported_cost,
+                    cost_cap=cost_cap,
+                )
+                if cost_error:
+                    return cost_error
+            else:
+                ledger.release(reservation)
+            return _provider_result_envelope(result)
+        if reported_cost is not None:
+            cost_error = _record_reported_hosted_cost(
+                ledger=ledger,
+                reservation=reservation,
+                session_id=session_id,
+                provider="browserbase",
+                reported_cost=reported_cost,
+                cost_cap=cost_cap,
+            )
+            if cost_error:
+                return cost_error
+        else:
+            ledger.release(reservation)
+        return _provider_result_envelope(result)
 
     if selected == "cloud":
         env = provider_env({"BROWSER_USE_API_KEY"})
