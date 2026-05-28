@@ -1,0 +1,89 @@
+# Research: Browser Fetch Router Daily-Use Reliability
+
+## Decision: Treat `example.com` as short-valid public content, not insufficient content
+
+**Rationale**: Live investigation showed the free provider returns real page content for `https://example.com`, but `quality.py` currently requires at least 80 words and marks the page as insufficient. The built-in network acceptance case expects `ok`, so the quality gate is stricter than the product contract for short valid pages.
+
+**Alternatives considered**:
+
+- Lower the global minimum word count only: rejected because empty and blocked pages still need explicit evidence-driven rejection.
+- Always allow `example.com`: rejected because that would hardcode one URL and violate single-path design.
+- Add a short-valid classification with evidence: chosen because it generalizes to other concise public pages while preserving blocked/empty detection.
+
+## Decision: Update Parallel fallback to the current Extract API contract
+
+**Rationale**: The current adapter posts `{"url": url}` to `https://api.parallel.ai/v1beta/extract` with bearer auth and receives HTTP 422 with a real key. A direct documented request shape using `https://api.parallel.ai/v1/extract`, `x-api-key`, and `{"urls": [...], "objective": ...}` succeeds and returns extract results. This is API/request-shape drift, not credential failure.
+
+**Alternatives considered**:
+
+- Treat Parallel as unavailable: rejected because live direct API evidence proves the provider works.
+- Keep both v1beta and v1 paths: rejected because it creates dual behavior unless there is a tested compatibility requirement.
+- Move to the current v1 request and parser: chosen.
+
+## Decision: Add dict-style Reddit listing shaping alongside existing post/comment shaping
+
+**Rationale**: Reddit post/comment URLs work through list-shaped JSON. Subreddit listing URLs return dict-shaped JSON with `data.children`, and `_extract_title()` already recognizes that shape while `_shape_reddit_listing()` does not. This is a narrow provider shaper gap.
+
+**Alternatives considered**:
+
+- Route listings through generic Jina: rejected because Reddit is already a dedicated provider route and public JSON gives structured listing content.
+- Add a separate Reddit listing provider module: rejected because the existing module owns Reddit JSON shaping.
+- Extend `_shape_reddit_listing()` for dict listings: chosen.
+
+## Decision: Make CDP setup user-facing instead of internal-spec-only
+
+**Rationale**: `read-user-tabs` works when a loopback Chrome CDP endpoint is started with a temporary profile, including list/read/screenshot flows. Without CDP it returns a correct structured `cdp_unreachable` failure, but README/help/adapters do not provide the safe setup path; the command is only documented in an internal feature quickstart.
+
+**Alternatives considered**:
+
+- Auto-launch the user's normal browser profile: rejected because it risks authenticated state and profile mutation.
+- Treat CDP absence as product failure: rejected because the CLI is correct when the required endpoint is absent.
+- Document and surface a safe loopback temporary-profile setup path: chosen.
+
+## Decision: Interactive provider discovery must distinguish live providers from stubs
+
+**Rationale**: Browser Use Cloud has a live provider path with credentialed smoke evidence and cost ledger recording. Browserbase and local currently return `provider_unavailable` after credential/dependency checks, so exposing them as peer daily-use providers is misleading unless they are implemented.
+
+**Alternatives considered**:
+
+- Keep stubs advertised and rely on runtime error: rejected because agents treat schema/help/adapters as capability truth.
+- Implement every provider immediately: allowed by spec, but only if it can be verified end to end with credentials/dependencies.
+- Mark unavailable providers clearly until implemented: chosen as the minimum truthful path.
+
+## Decision: Add explicit global install freshness verification
+
+**Rationale**: Branch/temp-venv verification can pass while the actual global shim points to a stale pipx environment. Live smoke must prove the real `command -v browser-fetch-router` target, schema defaults, adapter files, and branch expectation agree.
+
+**Alternatives considered**:
+
+- Assume reinstall succeeded if `pip install .` passed: rejected because it does not verify the user's global command.
+- Only verify `browser-fetch-router --help`: rejected because stale commands can still expose help.
+- Verify shim target, schema defaults, doctor, adapters, and outside-repo execution: chosen.
+
+## Decision: Keep credentials outside repo artifacts and issues
+
+**Rationale**: Provider credentials are available through the user's password manager, but repo governance forbids secrets in docs, tests, logs, adapters, or GitHub issues. Live smokes may use environment variables and must redact values.
+
+**Alternatives considered**:
+
+- Store test keys in fixtures: rejected.
+- Require live vendor tests in CI: rejected unless CI secret management is explicitly configured later.
+- Keep live vendor tests as local gated verification with env vars: chosen.
+
+## Evidence: #58 read-web short-valid page reliability
+
+**Baseline before fix**:
+
+- `HOME=/private/tmp/bfr-home-baseline python3 -m browser_fetch_router read-web https://example.com --json --no-cache` exited `3` with `status: quota_or_key_missing`, `error.code: paid_fallback_not_allowed`, and primary low-quality Jina content.
+- `HOME=/private/tmp/bfr-home-baseline python3 -m browser_fetch_router test-acceptance --include-network --json` exited `1`; `example-read-network` expected `ok` but returned `quota_or_key_missing`.
+- First TDD test `test_jina_accepts_short_valid_public_page_content` failed with `insufficient_content != ok`.
+
+**Green evidence after fix**:
+
+- `python3 -m pytest tests/browser_fetch_router/test_quality.py -q` -> `16 passed`; coverage includes the documented 20-word/120-char short-valid boundary, below-boundary rejection, strong login prompts in visible HTML, JS challenge blocking, empty semantic pages, high-boilerplate rejection, script/style stripping, and `sign in` not matching inside words.
+- `python3 -m pytest tests/browser_fetch_router/test_browser_reliability_cli.py tests/browser_fetch_router/test_browser_reliability_providers.py tests/browser_fetch_router/test_quality.py tests/browser_fetch_router/test_read_web.py -q` -> `32 passed`.
+- `HOME=/private/tmp/bfr-home-us1 python3 -m browser_fetch_router read-web https://example.com --json --no-cache` exited `0` with `status: ok`, `provider: jina-reader`, `quality.is_short_valid_content: true`, `quality.passes_quality_gate: true`, and `word_count: 58`.
+- `HOME=/private/tmp/bfr-home-us1 python3 -m browser_fetch_router test-acceptance --include-network --json` exited `0`; `18` cases passed, `0` failed, and `example-read-network` returned `ok`.
+- `git diff --check` exited `0`.
+- `python3 -m pytest tests/browser_fetch_router -q` in the sandbox failed only at `test_Q_run_cleanup_real_subprocess_lands_in_cleaned_bucket` because macOS denied `psutil` process enumeration via `sysctl`.
+- Escalated rerun of `python3 -m pytest tests/browser_fetch_router -q` exited `0` with `704 passed`.
