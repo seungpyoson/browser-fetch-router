@@ -635,6 +635,17 @@ def setup_cdp(
             evidence={"cdp_base": setup["cdp_base"], "setup": setup, "launch_required": True},
         )
 
+    if start_url != "about:blank":
+        try:
+            start_url = normalize_and_validate_url(start_url)
+        except SafetyError as exc:
+            return envelope(
+                command="read-user-tabs",
+                status="unsafe_url_blocked",
+                error={"code": str(exc), "message": "URL blocked by safety policy"},
+                evidence={"setup": setup},
+            )
+
     chrome = _find_chrome_executable()
     if chrome is None:
         return envelope(
@@ -646,9 +657,6 @@ def setup_cdp(
             },
             evidence={"setup": setup},
         )
-
-    if start_url != "about:blank":
-        start_url = normalize_and_validate_url(start_url)
 
     profile_dir = tempfile.mkdtemp(prefix="bfr-cdp-profile.")
     argv = [

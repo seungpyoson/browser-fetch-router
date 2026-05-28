@@ -134,6 +134,23 @@ def test_read_user_tabs_setup_cli_reports_managed_cdp_path():
     assert "--user-data-dir=<temporary-profile>" in setup["required_flags"]
 
 
+def test_read_user_tabs_setup_cli_rejects_unsafe_start_url_before_launch():
+    result = run_cli(
+        "read-user-tabs",
+        "setup",
+        "--launch",
+        "--start-url",
+        "file:///etc/passwd",
+        "--json",
+    )
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "unsafe_url_blocked"
+    assert payload["error"]["code"] == "blocked_scheme"
+    assert payload["evidence"]["setup"]["cdp_base"] == "http://127.0.0.1:9222"
+
+
 def test_interactive_browser_help_and_schema_mark_provider_capabilities():
     from browser_fetch_router.schema import schema_payload
 
