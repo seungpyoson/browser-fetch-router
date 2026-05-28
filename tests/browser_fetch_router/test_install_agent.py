@@ -416,9 +416,10 @@ def test_install_agent_select_cli_groups_requested_agents(capsys, monkeypatch):
 
     captured = {}
 
-    def fake_install_agents(agents, *, force=False):
+    def fake_install_agents(agents, *, force=False, default_mode=False):
         captured["agents"] = agents
         captured["force"] = force
+        captured["default_mode"] = default_mode
         return envelope(
             command="install-agent",
             status="ok",
@@ -433,7 +434,11 @@ def test_install_agent_select_cli_groups_requested_agents(capsys, monkeypatch):
     rc = cli.main(["install-agent", "--select", "claude,codex", "--force", "--json"])
 
     assert rc == 0
-    assert captured == {"agents": ["claude", "codex"], "force": True}
+    assert captured == {
+        "agents": ["claude", "codex"],
+        "force": True,
+        "default_mode": False,
+    }
     payload = json.loads(capsys.readouterr().out)
     assert payload["results"] == [
         {"agent": "claude", "status": "ok"},

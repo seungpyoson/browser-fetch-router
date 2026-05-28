@@ -467,20 +467,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "install-agent",
                         f"unknown agent(s) in --select: {', '.join(invalid)}",
                     )
-            if args.all:
-                def install_handler():
-                    return install_agents(
-                        selected_agents,
-                        force=args.force,
-                        default_mode=True,
-                    )
-            else:
-                def install_handler():
-                    return install_agents(
-                        selected_agents,
-                        force=args.force,
-                    )
-            return _emit("install-agent", handler=install_handler)
+            return _emit(
+                "install-agent",
+                handler=lambda: install_agents(
+                    selected_agents,
+                    force=args.force,
+                    default_mode=args.all,
+                ),
+            )
         if not args.agent:
             return _usage_error(
                 "install-agent",
