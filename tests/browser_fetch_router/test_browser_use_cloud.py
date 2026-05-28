@@ -11,7 +11,7 @@ class FakeResponse:
 
 
 class FakeHttpClient:
-    def __init__(self, responses: list[FakeResponse]) -> None:
+    def __init__(self, responses: list[FakeResponse | Exception]) -> None:
         self.responses = responses
         self.calls: list[dict[str, object]] = []
 
@@ -19,7 +19,10 @@ class FakeHttpClient:
         self.calls.append({"method": method, "url": url, **kwargs})
         if not self.responses:
             raise AssertionError("unexpected extra request")
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_browser_use_cloud_posts_safe_low_cost_session_and_polls_to_output():
@@ -68,6 +71,7 @@ def test_browser_use_cloud_posts_safe_low_cost_session_and_polls_to_output():
         "X-Browser-Use-API-Key": "bu_test",
         "Content-Type": "application/json",
     }
+    assert isinstance(create["body"], bytes)
     body = json.loads(create["body"])
     assert body == {
         "task": "open page https://example.com and report the title",
@@ -108,6 +112,25 @@ def test_browser_use_cloud_maps_auth_failure_to_missing_quota_or_key():
     assert result["error"]["http_status"] == 401
 
 
+def test_browser_use_cloud_missing_session_id_returns_provider_error():
+    from browser_fetch_router.providers import browser_use_cloud
+
+    client = FakeHttpClient([FakeResponse(200, {"status": "created"})])
+
+    result = browser_use_cloud.run_task(
+        "open page https://example.com",
+        api_key="bu_test",
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+        http_client=client,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_missing_session_id"
+
+
 def test_browser_use_cloud_stops_running_session_when_step_cap_is_reached():
     from browser_fetch_router.providers import browser_use_cloud
 
@@ -141,6 +164,41 @@ def test_browser_use_cloud_stops_running_session_when_step_cap_is_reached():
     assert result["evidence"]["total_cost_usd"] == "0.07"
     assert [call["method"] for call in client.calls] == ["POST", "GET", "POST"]
     assert client.calls[2]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-steps/stop"
+
+
+def test_browser_use_cloud_stops_running_session_when_poll_fails():
+    from browser_fetch_router.providers import browser_use_cloud
+
+    client = FakeHttpClient([
+        FakeResponse(200, {"id": "sess-poll-fail", "status": "running", "stepCount": 1}),
+        RuntimeError("poll transport failed"),
+        FakeResponse(
+            200,
+            {
+                "id": "sess-poll-fail",
+                "status": "stopped",
+                "stepCount": 1,
+                "totalCostUsd": "0.03",
+            },
+        ),
+    ])
+
+    result = browser_use_cloud.run_task(
+        "open page https://example.com",
+        api_key="bu_test",
+        max_steps=3,
+        max_duration_sec=30,
+        max_cost_usd=0.25,
+        http_client=client,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "provider_unavailable"
+    assert result["error"]["code"] == "browser_use_cloud_poll_failed"
+    assert result["evidence"]["remote_status"] == "stopped"
+    assert result["evidence"]["total_cost_usd"] == "0.03"
+    assert [call["method"] for call in client.calls] == ["POST", "GET", "POST"]
+    assert client.calls[2]["url"] == "https://api.browser-use.com/api/v3/sessions/sess-poll-fail/stop"
 
 
 def test_browser_use_cloud_stops_running_session_when_deadline_is_reached(monkeypatch):

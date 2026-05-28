@@ -45,7 +45,7 @@ def run_task(
         response = client.request(
             "POST",
             SESSIONS_URL,
-            body=json.dumps(body),
+            body=json.dumps(body).encode("utf-8"),
             max_bytes=1_000_000,
             extra_headers=headers,
         )
@@ -89,7 +89,14 @@ def run_task(
                 extra_headers={"X-Browser-Use-API-Key": api_key},
             )
         except Exception as exc:
-            return _provider_error("browser_use_cloud_poll_failed", message=str(exc)[:200])
+            stopped = _stop_session(client, api_key, session_id)
+            if stopped:
+                latest = stopped
+            return _provider_error(
+                "browser_use_cloud_poll_failed",
+                message=str(exc)[:200],
+                evidence=_evidence(session_id, latest),
+            )
         latest = _decode_json(response)
         if response.status_code not in {200, 201}:
             return _http_error(response.status_code, latest)

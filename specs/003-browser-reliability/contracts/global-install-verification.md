@@ -38,7 +38,7 @@ browser-fetch-router read-web https://example.com --json --no-cache
 Installability from the repository remains:
 
 ```bash
-BFR_TMPDIR="${TMPDIR:-/tmp}"
+export BFR_TMPDIR="<tmp-dir-outside-repo>"
 BFR_INSTALL_VENV="${BFR_TMPDIR%/}/bfr-install-verify"
 python3 -m venv "$BFR_INSTALL_VENV"
 "$BFR_INSTALL_VENV/bin/pip" install .

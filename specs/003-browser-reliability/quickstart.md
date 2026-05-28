@@ -35,7 +35,7 @@ Expected: paid fallback returns `status: ok` when eligible and records provider/
 Start a separate Chrome profile. Do not use the normal profile.
 
 ```bash
-BFR_TMPDIR="${TMPDIR:-/tmp}"
+export BFR_TMPDIR="<tmp-dir-outside-repo>"
 BFR_CDP_PROFILE="$(mktemp -d "${BFR_TMPDIR%/}/bfr-cdp-profile.XXXXXX")"
 BFR_SCREENSHOT="${BFR_TMPDIR%/}/bfr-active.png"
 
@@ -95,7 +95,7 @@ Expected: each provider is either live with an end-to-end run or consistently ma
 
 ## 6. Global Install Freshness
 
-Run outside the repository, for example from `${TMPDIR:-/tmp}`:
+Run outside the repository, for example from an external temporary directory:
 
 ```bash
 command -v browser-fetch-router
@@ -114,7 +114,7 @@ global command is stale, the verifier returns `stale_global_install` with a
 
 ## Latest Local Verification Evidence
 
-- `python3 -m pytest tests/browser_fetch_router -q` -> `745 passed`
+- `python3 -m pytest tests/browser_fetch_router -q` -> `747 passed`
 - `git diff --check` -> clean
 - Tracked-file contributor-path sweep -> no matches
 - Outside-repo temporary virtualenv install -> `pip install -q .`, `browser-fetch-router --help`, and `browser-fetch-router schema --json` passed

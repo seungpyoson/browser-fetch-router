@@ -39,5 +39,5 @@ curl -sS http://127.0.0.1:9222/json/version
 browser-fetch-router read-user-tabs list --json
 browser-fetch-router read-user-tabs list --all --approval-scope exact:list-all-tabs --persist-approval --show-all --json
 browser-fetch-router read-user-tabs read active --approval-scope hostname:www.wikipedia.org --max-chars 1000 --json
-browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output "${TMPDIR:-/tmp}/bfr-active.png" --json
+browser-fetch-router read-user-tabs screenshot active --approval-scope hostname:www.wikipedia.org --output "<tmp-dir-outside-repo>/bfr-active.png" --json
 ```
