@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
 import stat
+import sys
+import types
+
+import pytest
 
 
 def _patch_single_tab(
@@ -47,6 +52,7 @@ def test_setup_cdp_launch_starts_temp_loopback_chrome(monkeypatch, tmp_path):
     monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
     monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+    monkeypatch.setattr(rut, "_register_launched_cdp_process", lambda **_kw: None)
 
     result = rut.setup_cdp(launch=True, start_url="https://example.com")
 
@@ -62,6 +68,200 @@ def test_setup_cdp_launch_starts_temp_loopback_chrome(monkeypatch, tmp_path):
     assert any(item.startswith("https://example.com") for item in argv)
     assert kwargs["start_new_session"] is True
     assert "normal profile" in result["evidence"]["setup"]["warning"]
+
+
+def test_setup_cdp_launch_uses_lifecycle_profile_prefix(monkeypatch, tmp_path):
+    from browser_fetch_router import lifecycle
+    from browser_fetch_router import read_user_tabs as rut
+
+    prefixes = []
+
+    class FakePopen:
+        pid = 4243
+
+        def __init__(self, _argv, **_kwargs):
+            self.argv = _argv
+            self.kwargs = _kwargs
+
+    profile = tmp_path / "custom-cdp.profile"
+    monkeypatch.setattr(lifecycle, "CDP_PROFILE_PREFIX", "custom-cdp.")
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: prefixes.append(prefix) or str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+    monkeypatch.setattr(rut, "_register_launched_cdp_process", lambda **_kw: None)
+
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    assert result["status"] == "ok"
+    assert prefixes == ["custom-cdp."]
+
+
+def test_setup_cdp_launch_registers_process_for_session_cleanup(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+    from browser_fetch_router.lifecycle import (
+        CDP_PROCESS_KIND_READ_USER_TABS,
+        session_registry_path,
+    )
+
+    class FakePopen:
+        pid = 4244
+
+        def __init__(self, _argv, **_kwargs):
+            self.argv = _argv
+            self.kwargs = _kwargs
+
+    class FakeProcess:
+        def __init__(self, pid):
+            assert pid == 4244
+
+        def create_time(self):
+            return 123.456
+
+    fake_psutil = types.SimpleNamespace(
+        Process=FakeProcess,
+        Error=Exception,
+    )
+
+    profile = tmp_path / "bfr-cdp-profile.cleanup"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "cdp-cleanup-session")
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    path = session_registry_path("cdp-cleanup-session")
+    assert result["status"] == "ok"
+    assert result["evidence"]["session_id"] == "cdp-cleanup-session"
+    assert path.exists()
+    data = json.loads(path.read_text())
+    process = data["local_processes"][0]
+    assert process["pid"] == 4244
+    assert process["create_time"] == pytest.approx(123.456)
+    assert process["process_group"] == 4244
+    assert process["info"]["kind"] == CDP_PROCESS_KIND_READ_USER_TABS
+    assert process["info"]["profile_dir"] == str(profile)
+
+
+def test_setup_cdp_launch_reports_registration_error(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    class FakePopen:
+        pid = 4245
+
+        def __init__(self, _argv, **_kwargs):
+            self.argv = _argv
+            self.kwargs = _kwargs
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    class FakeProcess:
+        def __init__(self, _pid):
+            self.pid = _pid
+
+        def create_time(self):
+            raise OSError("registry unavailable")
+
+    fake_psutil = types.SimpleNamespace(Process=FakeProcess)
+
+    profile = tmp_path / "bfr-cdp-profile.registration-failed"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "cdp-registration-failure")
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+
+    profile.mkdir()
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_launch_registration_failed"
+    assert result["evidence"]["registration_error"] == {
+        "type": "OSError",
+        "message": "registry unavailable",
+    }
+    assert not profile.exists()
+
+
+def test_setup_cdp_launch_removes_profile_when_chrome_fails_to_start(
+    monkeypatch, tmp_path
+):
+    from browser_fetch_router import read_user_tabs as rut
+
+    profile = tmp_path / "bfr-cdp-profile.popen-failed"
+
+    def fail_popen(*_args, **_kwargs):
+        raise OSError("launch denied")
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "cdp-popen-failure")
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", fail_popen)
+
+    profile.mkdir()
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_launch_failed"
+    assert result["evidence"]["launch_error"] == {
+        "type": "OSError",
+        "message": "launch denied",
+    }
+    assert not profile.exists()
+
+
+def test_setup_cdp_launch_preserves_safety_error_during_registration(
+    monkeypatch, tmp_path
+):
+    from browser_fetch_router import read_user_tabs as rut
+    from browser_fetch_router.url_safety import SafetyError
+
+    class FakePopen:
+        pid = 4246
+
+        def __init__(self, _argv, **_kwargs):
+            self.argv = _argv
+            self.kwargs = _kwargs
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    class FakeProcess:
+        def __init__(self, _pid):
+            self.pid = _pid
+
+        def create_time(self):
+            raise SafetyError("blocked private address")
+
+    fake_psutil = types.SimpleNamespace(Process=FakeProcess)
+
+    profile = tmp_path / "bfr-cdp-profile.safety"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "cdp-safety")
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+
+    with pytest.raises(SafetyError):
+        rut.setup_cdp(launch=True, start_url="https://example.com")
 
 
 def test_setup_cdp_launch_rejects_unsafe_start_url_before_chrome(monkeypatch):

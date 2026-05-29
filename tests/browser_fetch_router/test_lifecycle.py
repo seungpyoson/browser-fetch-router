@@ -215,3 +215,112 @@ def test_run_cleanup_buckets_outcomes_under_correct_keys(tmp_path, monkeypatch):
         assert key in per_session, f"missing bucket {key!r} in {per_session!r}"
     # Dead key absent.
     assert "killed" not in per_session
+
+
+def test_run_cleanup_removes_registered_cdp_temp_profile(tmp_path, monkeypatch):
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from browser_fetch_router import lifecycle
+    from browser_fetch_router.lifecycle import CDP_PROCESS_KIND_READ_USER_TABS
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        lifecycle,
+        "_kill_pid_safely",
+        lambda pid, ct, *, dry_run: "cleaned",
+    )
+    profile = Path(tempfile.mkdtemp(prefix="bfr-cdp-profile."))
+    try:
+        (profile / "marker").write_text("temporary browser profile")
+        lifecycle.register_process(
+            "bfr-cdp-profile-cleanup",
+            pid=12345,
+            create_time=100.0,
+            process_group=12345,
+            info={
+                "kind": CDP_PROCESS_KIND_READ_USER_TABS,
+                "profile_dir": str(profile),
+            },
+        )
+
+        result = lifecycle.run_cleanup(
+            all_sessions=True,
+            session_id="bfr-cdp-profile-cleanup",
+            dry_run=False,
+        )
+
+        assert not profile.exists()
+        entry = result["evidence"]["results"][0]["cleaned"][0]
+        assert entry["profile_dir_removed"] is True
+    finally:
+        shutil.rmtree(profile, ignore_errors=True)
+
+
+def test_run_cleanup_does_not_remove_cdp_profile_outside_temp_root(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import lifecycle
+    from browser_fetch_router.lifecycle import CDP_PROCESS_KIND_READ_USER_TABS
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        lifecycle,
+        "_kill_pid_safely",
+        lambda pid, ct, *, dry_run: "cleaned",
+    )
+    profile = tmp_path / "bfr-cdp-profile.not-owned"
+    profile.mkdir()
+    (profile / "marker").write_text("not a managed temp profile")
+    lifecycle.register_process(
+        "bfr-cdp-profile-unsafe",
+        pid=12345,
+        create_time=100.0,
+        process_group=12345,
+        info={
+            "kind": CDP_PROCESS_KIND_READ_USER_TABS,
+            "profile_dir": str(profile),
+        },
+    )
+
+    result = lifecycle.run_cleanup(
+        all_sessions=True,
+        session_id="bfr-cdp-profile-unsafe",
+        dry_run=False,
+    )
+
+    assert profile.exists()
+    entry = result["evidence"]["results"][0]["cleaned"][0]
+    assert entry["profile_dir_removed"] is False
+
+
+def test_run_cleanup_surfaces_invalid_cdp_profile_path(tmp_path, monkeypatch):
+    from browser_fetch_router import lifecycle
+    from browser_fetch_router.lifecycle import CDP_PROCESS_KIND_READ_USER_TABS
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        lifecycle,
+        "_kill_pid_safely",
+        lambda pid, ct, *, dry_run: "cleaned",
+    )
+    lifecycle.register_process(
+        "bfr-cdp-profile-invalid",
+        pid=12345,
+        create_time=100.0,
+        process_group=12345,
+        info={
+            "kind": CDP_PROCESS_KIND_READ_USER_TABS,
+            "profile_dir": "bad\x00profile",
+        },
+    )
+
+    result = lifecycle.run_cleanup(
+        all_sessions=True,
+        session_id="bfr-cdp-profile-invalid",
+        dry_run=False,
+    )
+
+    entry = result["evidence"]["results"][0]["cleaned"][0]
+    assert entry["profile_dir_removed"] is False

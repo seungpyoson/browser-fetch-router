@@ -658,7 +658,11 @@ def setup_cdp(
             evidence={"setup": setup},
         )
 
-    profile_dir = tempfile.mkdtemp(prefix="bfr-cdp-profile.")
+    from browser_fetch_router.lifecycle import CDP_PROFILE_PREFIX
+    from browser_fetch_router.session import current_session_id
+
+    session_id = current_session_id()
+    profile_dir = tempfile.mkdtemp(prefix=CDP_PROFILE_PREFIX)
     argv = [
         chrome,
         "--remote-debugging-address=127.0.0.1",
@@ -668,12 +672,30 @@ def setup_cdp(
         "--no-default-browser-check",
         start_url,
     ]
-    proc = subprocess.Popen(
-        argv,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        return envelope(
+            command="read-user-tabs",
+            status="tool_setup_failed",
+            error={
+                "code": "cdp_launch_failed",
+                "message": "Chrome could not be started.",
+            },
+            evidence={
+                "cdp_base": setup["cdp_base"],
+                "profile_dir": profile_dir,
+                "setup": setup,
+                "argv": _redacted_launch_argv(argv),
+                "launch_error": _exception_evidence(exc),
+            },
+        )
     if not _wait_for_cdp_ready(setup["cdp_base"]):
         _terminate_process(proc)
         shutil.rmtree(profile_dir, ignore_errors=True)
@@ -692,6 +714,38 @@ def setup_cdp(
                 "argv": _redacted_launch_argv(argv),
             },
         )
+    try:
+        registration_error = _register_launched_cdp_process(
+            session_id=session_id,
+            proc=proc,
+            profile_dir=profile_dir,
+            cdp_base=setup["cdp_base"],
+            argv=argv,
+        )
+    except SafetyError:
+        _terminate_process(proc)
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        raise
+    if registration_error is not None:
+        _terminate_process(proc)
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        return envelope(
+            command="read-user-tabs",
+            status="tool_setup_failed",
+            error={
+                "code": "cdp_launch_registration_failed",
+                "message": "Chrome started but could not be registered for cleanup.",
+            },
+            evidence={
+                "cdp_base": setup["cdp_base"],
+                "pid": proc.pid,
+                "profile_dir": profile_dir,
+                "session_id": session_id,
+                "setup": setup,
+                "argv": _redacted_launch_argv(argv),
+                "registration_error": registration_error,
+            },
+        )
     return envelope(
         command="read-user-tabs",
         status="ok",
@@ -699,6 +753,7 @@ def setup_cdp(
             "cdp_base": setup["cdp_base"],
             "pid": proc.pid,
             "profile_dir": profile_dir,
+            "session_id": session_id,
             "setup": setup,
             "argv": _redacted_launch_argv(argv),
         },
@@ -752,6 +807,49 @@ def _terminate_process(proc: subprocess.Popen) -> None:
             pass
     except Exception:
         pass
+
+
+def _register_launched_cdp_process(
+    *,
+    session_id: str,
+    proc: subprocess.Popen,
+    profile_dir: str,
+    cdp_base: str,
+    argv: list[str],
+) -> dict[str, str] | None:
+    try:
+        import psutil  # type: ignore
+
+        create_time = float(psutil.Process(proc.pid).create_time())
+        from browser_fetch_router.lifecycle import (
+            CDP_PROCESS_KIND_READ_USER_TABS,
+            register_process,
+        )
+
+        register_process(
+            session_id,
+            pid=proc.pid,
+            create_time=create_time,
+            process_group=proc.pid,
+            info={
+                "kind": CDP_PROCESS_KIND_READ_USER_TABS,
+                "cdp_base": cdp_base,
+                "profile_dir": profile_dir,
+                "argv": _redacted_launch_argv(argv),
+            },
+        )
+    except SafetyError:
+        raise
+    except Exception as exc:
+        return _exception_evidence(exc)
+    return None
+
+
+def _exception_evidence(exc: Exception) -> dict[str, str]:
+    return {
+        "type": exc.__class__.__name__,
+        "message": str(exc),
+    }
 
 
 def _redacted_launch_argv(argv: list[str]) -> list[str]:
