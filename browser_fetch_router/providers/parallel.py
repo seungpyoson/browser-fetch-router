@@ -144,19 +144,7 @@ def _content_from_result(result: dict[str, Any]) -> str:
 
 
 def _extract_error_for_url(data: dict[str, Any], url: str) -> dict[str, Any] | None:
-    errors = data.get("errors")
-    if not isinstance(errors, list):
-        return None
-    selected: dict[str, Any] | None = None
-    for item in errors:
-        if isinstance(item, dict) and item.get("url") == url:
-            selected = item
-            break
-    if selected is None:
-        for item in errors:
-            if isinstance(item, dict):
-                selected = item
-                break
+    selected = _select_error_for_url(data.get("errors"), url)
     if selected is None:
         return None
 
@@ -171,6 +159,16 @@ def _extract_error_for_url(data: dict[str, Any], url: str) -> dict[str, Any] | N
     if isinstance(message, str) and message:
         error["message"] = message[:200]
     return error
+
+
+def _select_error_for_url(errors: Any, url: str) -> dict[str, Any] | None:
+    if not isinstance(errors, list):
+        return None
+    dict_errors = [item for item in errors if isinstance(item, dict)]
+    for item in dict_errors:
+        if item.get("url") == url:
+            return item
+    return dict_errors[0] if dict_errors else None
 
 
 def _http_error(response: Any, code: str) -> dict[str, Any]:

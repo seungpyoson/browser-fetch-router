@@ -61,51 +61,18 @@ def run_task(
         return _provider_error("browser_use_cloud_missing_session_id")
 
     step_limit = max(1, int(max_steps))
-    latest = data
     deadline = time.monotonic() + max(1, int(max_duration_sec))
-    while str(latest.get("status") or "") not in TERMINAL_STATUSES:
-        step_count = _step_count(latest)
-        if step_count is not None and step_count >= step_limit:
-            stopped = _stop_session(client, api_key, session_id)
-            if stopped:
-                latest = stopped
-            evidence = _evidence(session_id, latest)
-            evidence["max_steps"] = step_limit
-            return _provider_error("browser_use_cloud_max_steps_exceeded", evidence=evidence)
-        if time.monotonic() >= deadline:
-            stopped = _stop_session(client, api_key, session_id)
-            if stopped:
-                latest = stopped
-            return _provider_error(
-                "browser_use_cloud_timeout",
-                evidence=_evidence(session_id, latest),
-            )
-        sleep(min(2.0, max(0.0, deadline - time.monotonic())))
-        try:
-            response = client.request(
-                "GET",
-                f"{SESSIONS_URL}/{session_id}",
-                max_bytes=1_000_000,
-                extra_headers={"X-Browser-Use-API-Key": api_key},
-            )
-        except Exception as exc:
-            stopped = _stop_session(client, api_key, session_id)
-            if stopped:
-                latest = stopped
-            return _provider_error(
-                "browser_use_cloud_poll_failed",
-                message=str(exc)[:200],
-                evidence=_evidence(session_id, latest),
-            )
-        poll_data = _decode_json(response)
-        if response.status_code not in {200, 201}:
-            stopped = _stop_session(client, api_key, session_id)
-            if stopped:
-                latest = stopped
-            result = _http_error(response.status_code, poll_data)
-            result["evidence"] = _evidence(session_id, latest)
-            return result
-        latest = poll_data
+    latest, poll_error = _poll_until_terminal(
+        client=client,
+        api_key=api_key,
+        session_id=session_id,
+        latest=data,
+        step_limit=step_limit,
+        deadline=deadline,
+        sleep=sleep,
+    )
+    if poll_error:
+        return poll_error
 
     remote_status = str(latest.get("status") or "")
     evidence = _evidence(session_id, latest)
@@ -129,6 +96,100 @@ def run_task(
         "content_markdown": content,
         "evidence": evidence,
     }
+
+
+def _poll_until_terminal(
+    *,
+    client: SafeHttpClient,
+    api_key: str,
+    session_id: str,
+    latest: dict[str, Any],
+    step_limit: int,
+    deadline: float,
+    sleep: Callable[[float], None],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    while str(latest.get("status") or "") not in TERMINAL_STATUSES:
+        limit_error = _step_limit_error(client, api_key, session_id, latest, step_limit)
+        if limit_error:
+            return latest, limit_error
+        timeout_error = _timeout_error(client, api_key, session_id, latest, deadline)
+        if timeout_error:
+            return latest, timeout_error
+        sleep(min(2.0, max(0.0, deadline - time.monotonic())))
+        latest, poll_error = _poll_once(client, api_key, session_id, latest)
+        if poll_error:
+            return latest, poll_error
+    return latest, None
+
+
+def _step_limit_error(
+    client: SafeHttpClient,
+    api_key: str,
+    session_id: str,
+    latest: dict[str, Any],
+    step_limit: int,
+) -> dict[str, Any] | None:
+    step_count = _step_count(latest)
+    if step_count is None or step_count < step_limit:
+        return None
+    latest = _stopped_or_latest(client, api_key, session_id, latest)
+    evidence = _evidence(session_id, latest)
+    evidence["max_steps"] = step_limit
+    return _provider_error("browser_use_cloud_max_steps_exceeded", evidence=evidence)
+
+
+def _timeout_error(
+    client: SafeHttpClient,
+    api_key: str,
+    session_id: str,
+    latest: dict[str, Any],
+    deadline: float,
+) -> dict[str, Any] | None:
+    if time.monotonic() < deadline:
+        return None
+    latest = _stopped_or_latest(client, api_key, session_id, latest)
+    return _provider_error(
+        "browser_use_cloud_timeout",
+        evidence=_evidence(session_id, latest),
+    )
+
+
+def _poll_once(
+    client: SafeHttpClient,
+    api_key: str,
+    session_id: str,
+    latest: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    try:
+        response = client.request(
+            "GET",
+            f"{SESSIONS_URL}/{session_id}",
+            max_bytes=1_000_000,
+            extra_headers={"X-Browser-Use-API-Key": api_key},
+        )
+    except Exception as exc:
+        latest = _stopped_or_latest(client, api_key, session_id, latest)
+        return latest, _provider_error(
+            "browser_use_cloud_poll_failed",
+            message=str(exc)[:200],
+            evidence=_evidence(session_id, latest),
+        )
+    poll_data = _decode_json(response)
+    if response.status_code in {200, 201}:
+        return poll_data, None
+    latest = _stopped_or_latest(client, api_key, session_id, latest)
+    result = _http_error(response.status_code, poll_data)
+    result["evidence"] = _evidence(session_id, latest)
+    return latest, result
+
+
+def _stopped_or_latest(
+    client: SafeHttpClient,
+    api_key: str,
+    session_id: str,
+    latest: dict[str, Any],
+) -> dict[str, Any]:
+    return _stop_session(client, api_key, session_id) or latest
 
 
 def _decode_json(response: Any) -> dict[str, Any]:

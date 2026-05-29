@@ -106,6 +106,7 @@ def test_browserbase_stagehand_success_runs_and_ends_session(monkeypatch):
     assert result["provider"] == "browserbase"
     assert result["content_markdown"] == "Page title: Example Domain"
     assert result["evidence"]["session_id"] == "bb-session-1"
+    assert created
     assert created[0].browserbase_api_key == "bb_secret"
     assert created[0].browserbase_project_id == "bb_project"
     assert created[0].events == [

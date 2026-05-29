@@ -302,6 +302,258 @@ def _record_reported_hosted_cost(
     )
 
 
+def _hosted_limits(max_cost_usd: float) -> tuple[float, float, dict[str, Any] | None]:
+    cost_cap = _hosted_cost_cap(max_cost_usd)
+    if cost_cap is None:
+        return 0.0, 0.0, envelope(
+            command="interactive-browser",
+            status="usage_error",
+            error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
+        )
+    daily_cap = _hosted_daily_cost_cap()
+    if daily_cap is None:
+        return 0.0, 0.0, envelope(
+            command="interactive-browser",
+            status="usage_error",
+            error={
+                "code": "invalid_daily_cost_cap",
+                "env": HOSTED_BROWSER_DAILY_COST_CAP_ENV,
+            },
+        )
+    return cost_cap, daily_cap, None
+
+
+def _reserve_hosted_or_error(
+    *,
+    provider: str,
+    session_id: str,
+    cost_cap: float,
+    daily_cap: float,
+) -> tuple[CostLedger, str | bool, dict[str, Any] | None]:
+    ledger = CostLedger(state_dir() / "cost.db")
+    reservation = _reserve_hosted_cost(
+        ledger,
+        session_id,
+        provider,
+        cost_cap,
+        request_cap=cost_cap,
+        daily_cap=daily_cap,
+    )
+    if reservation:
+        return ledger, reservation, None
+    return ledger, reservation, _cost_cap_exceeded(
+        provider=provider,
+        session_id=session_id,
+        max_cost_usd=cost_cap,
+        reason="paid_session_disabled_or_cap_exceeded",
+    )
+
+
+def _finalize_hosted_result(
+    *,
+    ledger: CostLedger,
+    reservation: str | bool,
+    session_id: str,
+    provider: str,
+    result: dict[str, Any],
+    cost_cap: float,
+    daily_cap: float,
+    release_unreported_success: bool,
+) -> dict[str, Any]:
+    reported_cost = _reported_cost(result.get("evidence"))
+    if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
+        ledger.release(reservation)
+        ledger.disable_session(session_id, "provider_overrun")
+        return _cost_cap_exceeded(
+            provider=provider,
+            session_id=session_id,
+            max_cost_usd=cost_cap,
+            reason="provider_reported_overrun",
+            evidence={
+                "reported_total_cost_usd": str(reported_cost),
+                "provider_evidence": result.get("evidence"),
+            },
+        )
+    if result.get("status") != "ok":
+        return _finalize_hosted_failure(
+            ledger=ledger,
+            reservation=reservation,
+            session_id=session_id,
+            provider=provider,
+            result=result,
+            reported_cost=reported_cost,
+            cost_cap=cost_cap,
+            daily_cap=daily_cap,
+        )
+    if reported_cost is not None:
+        cost_error = _record_reported_hosted_cost(
+            ledger=ledger,
+            reservation=reservation,
+            session_id=session_id,
+            provider=provider,
+            reported_cost=reported_cost,
+            cost_cap=cost_cap,
+            daily_cap=daily_cap,
+        )
+        if cost_error:
+            return cost_error
+    elif release_unreported_success:
+        ledger.release(reservation)
+    return _provider_result_envelope(result)
+
+
+def _finalize_hosted_failure(
+    *,
+    ledger: CostLedger,
+    reservation: str | bool,
+    session_id: str,
+    provider: str,
+    result: dict[str, Any],
+    reported_cost: Decimal | None,
+    cost_cap: float,
+    daily_cap: float,
+) -> dict[str, Any]:
+    if reported_cost is not None:
+        cost_error = _record_reported_hosted_cost(
+            ledger=ledger,
+            reservation=reservation,
+            session_id=session_id,
+            provider=provider,
+            reported_cost=reported_cost,
+            cost_cap=cost_cap,
+            daily_cap=daily_cap,
+        )
+        if cost_error:
+            return cost_error
+    else:
+        ledger.release(reservation)
+    return _provider_result_envelope(result)
+
+
+def _run_browserbase(
+    *,
+    task: str,
+    max_steps: int,
+    max_duration_sec: int,
+    max_cost_usd: float,
+) -> dict[str, Any]:
+    env = provider_env({"BROWSERBASE_API_KEY"})
+    api_key = env.get("BROWSERBASE_API_KEY")
+    if not api_key:
+        return envelope(
+            command="interactive-browser",
+            status="quota_or_key_missing",
+            error={"code": "browserbase_credentials_missing"},
+        )
+    cost_cap, daily_cap, limit_error = _hosted_limits(max_cost_usd)
+    if limit_error:
+        return limit_error
+    session_id = current_session_id()
+    ledger, reservation, reserve_error = _reserve_hosted_or_error(
+        provider="browserbase",
+        session_id=session_id,
+        cost_cap=cost_cap,
+        daily_cap=daily_cap,
+    )
+    if reserve_error:
+        return reserve_error
+    try:
+        browserbase_stagehand = importlib.import_module(
+            "browser_fetch_router.providers.browserbase_stagehand"
+        )
+        result = browserbase_stagehand.run_task(
+            task=task,
+            api_key=api_key,
+            project_id=os.environ.get("BROWSERBASE_PROJECT_ID"),
+            model_name="google/gemini-2.5-flash",
+            max_steps=max_steps,
+            max_duration_sec=max_duration_sec,
+        )
+    except Exception:
+        ledger.release(reservation)
+        return _provider_result_envelope({
+            "status": "provider_unavailable",
+            "provider": "browserbase",
+            "error": {"code": "browserbase_exception"},
+            "evidence": {
+                "provider": "browserbase",
+                "session_id": session_id,
+                "reason": "provider_exception",
+            },
+        })
+    return _finalize_hosted_result(
+        ledger=ledger,
+        reservation=reservation,
+        session_id=session_id,
+        provider="browserbase",
+        result=result,
+        cost_cap=cost_cap,
+        daily_cap=daily_cap,
+        release_unreported_success=False,
+    )
+
+
+def _run_cloud(
+    *,
+    task: str,
+    max_steps: int,
+    max_duration_sec: int,
+    max_cost_usd: float,
+) -> dict[str, Any]:
+    env = provider_env({"BROWSER_USE_API_KEY"})
+    api_key = env.get("BROWSER_USE_API_KEY")
+    if not api_key:
+        return envelope(
+            command="interactive-browser",
+            status="quota_or_key_missing",
+            error={"code": "browser_use_cloud_key_missing"},
+        )
+    cost_cap, daily_cap, limit_error = _hosted_limits(max_cost_usd)
+    if limit_error:
+        return limit_error
+    session_id = current_session_id()
+    ledger, reservation, reserve_error = _reserve_hosted_or_error(
+        provider="browser-use-cloud",
+        session_id=session_id,
+        cost_cap=cost_cap,
+        daily_cap=daily_cap,
+    )
+    if reserve_error:
+        return reserve_error
+    try:
+        from browser_fetch_router.providers import browser_use_cloud
+
+        result = browser_use_cloud.run_task(
+            task=task,
+            api_key=api_key,
+            max_steps=max_steps,
+            max_duration_sec=max_duration_sec,
+            max_cost_usd=cost_cap,
+        )
+    except Exception:
+        ledger.release(reservation)
+        return _provider_result_envelope({
+            "status": "provider_unavailable",
+            "provider": "browser-use-cloud",
+            "error": {"code": "browser_use_cloud_exception"},
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": session_id,
+                "reason": "provider_exception",
+            },
+        })
+    return _finalize_hosted_result(
+        ledger=ledger,
+        reservation=reservation,
+        session_id=session_id,
+        provider="browser-use-cloud",
+        result=result,
+        cost_cap=cost_cap,
+        daily_cap=daily_cap,
+        release_unreported_success=True,
+    )
+
+
 def run_interactive_browser(
     task: str,
     *,
@@ -352,230 +604,20 @@ def run_interactive_browser(
         )
 
     if selected == "browserbase":
-        env = provider_env({"BROWSERBASE_API_KEY"})
-        api_key = env.get("BROWSERBASE_API_KEY")
-        if not api_key:
-            return envelope(
-                command="interactive-browser",
-                status="quota_or_key_missing",
-                error={"code": "browserbase_credentials_missing"},
-            )
-        cost_cap = _hosted_cost_cap(max_cost_usd)
-        if cost_cap is None:
-            return envelope(
-                command="interactive-browser",
-                status="usage_error",
-                error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
-            )
-        daily_cap = _hosted_daily_cost_cap()
-        if daily_cap is None:
-            return envelope(
-                command="interactive-browser",
-                status="usage_error",
-                error={
-                    "code": "invalid_daily_cost_cap",
-                    "env": HOSTED_BROWSER_DAILY_COST_CAP_ENV,
-                },
-            )
-        session_id = current_session_id()
-        ledger = CostLedger(state_dir() / "cost.db")
-        reservation = _reserve_hosted_cost(
-            ledger,
-            session_id,
-            "browserbase",
-            cost_cap,
-            request_cap=cost_cap,
-            daily_cap=daily_cap,
+        return _run_browserbase(
+            task=task,
+            max_steps=max_steps,
+            max_duration_sec=max_duration_sec,
+            max_cost_usd=max_cost_usd,
         )
-        if not reservation:
-            return _cost_cap_exceeded(
-                provider="browserbase",
-                session_id=session_id,
-                max_cost_usd=cost_cap,
-                reason="paid_session_disabled_or_cap_exceeded",
-            )
-        try:
-            browserbase_stagehand = importlib.import_module(
-                "browser_fetch_router.providers.browserbase_stagehand"
-            )
-            result = browserbase_stagehand.run_task(
-                task=task,
-                api_key=api_key,
-                project_id=os.environ.get("BROWSERBASE_PROJECT_ID"),
-                model_name="google/gemini-2.5-flash",
-                max_steps=max_steps,
-                max_duration_sec=max_duration_sec,
-            )
-        except Exception:
-            ledger.release(reservation)
-            return _provider_result_envelope({
-                "status": "provider_unavailable",
-                "provider": "browserbase",
-                "error": {"code": "browserbase_exception"},
-                "evidence": {
-                    "provider": "browserbase",
-                    "session_id": session_id,
-                    "reason": "provider_exception",
-                },
-            })
-        reported_cost = _reported_cost(result.get("evidence"))
-        if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
-            ledger.release(reservation)
-            ledger.disable_session(session_id, "provider_overrun")
-            return _cost_cap_exceeded(
-                provider="browserbase",
-                session_id=session_id,
-                max_cost_usd=cost_cap,
-                reason="provider_reported_overrun",
-                evidence={
-                    "reported_total_cost_usd": str(reported_cost),
-                    "provider_evidence": result.get("evidence"),
-                },
-            )
-        if result.get("status") != "ok":
-            if reported_cost is not None:
-                cost_error = _record_reported_hosted_cost(
-                    ledger=ledger,
-                    reservation=reservation,
-                    session_id=session_id,
-                    provider="browserbase",
-                    reported_cost=reported_cost,
-                    cost_cap=cost_cap,
-                    daily_cap=daily_cap,
-                )
-                if cost_error:
-                    return cost_error
-            else:
-                ledger.release(reservation)
-            return _provider_result_envelope(result)
-        if reported_cost is not None:
-            cost_error = _record_reported_hosted_cost(
-                ledger=ledger,
-                reservation=reservation,
-                session_id=session_id,
-                provider="browserbase",
-                reported_cost=reported_cost,
-                cost_cap=cost_cap,
-                daily_cap=daily_cap,
-            )
-            if cost_error:
-                return cost_error
-        # Browserbase Stagehand does not currently report USD cost. Keep the
-        # conservative preflight reservation on success so daily/session caps
-        # still bind instead of silently allowing unmetered hosted sessions.
-        return _provider_result_envelope(result)
 
     if selected == "cloud":
-        env = provider_env({"BROWSER_USE_API_KEY"})
-        api_key = env.get("BROWSER_USE_API_KEY")
-        if not api_key:
-            return envelope(
-                command="interactive-browser",
-                status="quota_or_key_missing",
-                error={"code": "browser_use_cloud_key_missing"},
-            )
-        cost_cap = _hosted_cost_cap(max_cost_usd)
-        if cost_cap is None:
-            return envelope(
-                command="interactive-browser",
-                status="usage_error",
-                error={"code": "invalid_max_cost_usd", "value": max_cost_usd},
-            )
-        daily_cap = _hosted_daily_cost_cap()
-        if daily_cap is None:
-            return envelope(
-                command="interactive-browser",
-                status="usage_error",
-                error={
-                    "code": "invalid_daily_cost_cap",
-                    "env": HOSTED_BROWSER_DAILY_COST_CAP_ENV,
-                },
-            )
-        session_id = current_session_id()
-        ledger = CostLedger(state_dir() / "cost.db")
-        reservation = _reserve_hosted_cost(
-            ledger,
-            session_id,
-            "browser-use-cloud",
-            cost_cap,
-            request_cap=cost_cap,
-            daily_cap=daily_cap,
+        return _run_cloud(
+            task=task,
+            max_steps=max_steps,
+            max_duration_sec=max_duration_sec,
+            max_cost_usd=max_cost_usd,
         )
-        if not reservation:
-            return _cost_cap_exceeded(
-                provider="browser-use-cloud",
-                session_id=session_id,
-                max_cost_usd=cost_cap,
-                reason="paid_session_disabled_or_cap_exceeded",
-            )
-
-        try:
-            from browser_fetch_router.providers import browser_use_cloud
-
-            result = browser_use_cloud.run_task(
-                task=task,
-                api_key=api_key,
-                max_steps=max_steps,
-                max_duration_sec=max_duration_sec,
-                max_cost_usd=cost_cap,
-            )
-        except Exception:
-            ledger.release(reservation)
-            return _provider_result_envelope({
-                "status": "provider_unavailable",
-                "provider": "browser-use-cloud",
-                "error": {"code": "browser_use_cloud_exception"},
-                "evidence": {
-                    "provider": "browser-use-cloud",
-                    "session_id": session_id,
-                    "reason": "provider_exception",
-                },
-            })
-        reported_cost = _reported_cost(result.get("evidence"))
-        if reported_cost is not None and reported_cost > Decimal(str(cost_cap)):
-            ledger.release(reservation)
-            ledger.disable_session(session_id, "provider_overrun")
-            return _cost_cap_exceeded(
-                provider="browser-use-cloud",
-                session_id=session_id,
-                max_cost_usd=cost_cap,
-                reason="provider_reported_overrun",
-                evidence={
-                    "reported_total_cost_usd": str(reported_cost),
-                    "provider_evidence": result.get("evidence"),
-                },
-            )
-        if result.get("status") != "ok":
-            if reported_cost is not None:
-                cost_error = _record_reported_hosted_cost(
-                    ledger=ledger,
-                    reservation=reservation,
-                    session_id=session_id,
-                    provider="browser-use-cloud",
-                    reported_cost=reported_cost,
-                    cost_cap=cost_cap,
-                    daily_cap=daily_cap,
-                )
-                if cost_error:
-                    return cost_error
-            else:
-                ledger.release(reservation)
-            return _provider_result_envelope(result)
-        if reported_cost is not None:
-            cost_error = _record_reported_hosted_cost(
-                ledger=ledger,
-                reservation=reservation,
-                session_id=session_id,
-                provider="browser-use-cloud",
-                reported_cost=reported_cost,
-                cost_cap=cost_cap,
-                daily_cap=daily_cap,
-            )
-            if cost_error:
-                return cost_error
-        else:
-            ledger.release(reservation)
-        return _provider_result_envelope(result)
 
     return envelope(
         command="interactive-browser",
