@@ -67,6 +67,7 @@ def read_web(
         "allow_paid": allow_paid,
         "side_effect_policy": side_effect_policy,
         "http_client": http_client or SafeHttpClient(),
+        "http_client_is_default": http_client is None,
     }
 
     cache = CacheStore(cache_dir() / "web")
@@ -164,7 +165,12 @@ def _maybe_paid_fallback(primary: dict[str, Any], url: str, route: str, ctx: dic
                 "primary_status": status,
             },
         }
-    return fetch_parallel(url, ctx)
+    paid_ctx = ctx
+    if ctx.get("http_client_is_default"):
+        paid_ctx = {**ctx}
+        paid_ctx.pop("http_client", None)
+        paid_ctx.pop("http_client_is_default", None)
+    return fetch_parallel(url, paid_ctx)
 
 
 def _shape_envelope(result: dict[str, Any], url: str, route: str) -> dict[str, Any]:

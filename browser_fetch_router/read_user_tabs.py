@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -33,7 +38,7 @@ from browser_fetch_router.paths import (
     validate_image_dest,
 )
 from browser_fetch_router.schema import envelope
-from browser_fetch_router.url_safety import SafetyError
+from browser_fetch_router.url_safety import SafetyError, normalize_and_validate_url
 
 
 _NON_HTTP_SCHEMES_TO_REDACT = frozenset({
@@ -46,6 +51,17 @@ _NON_HTTP_SCHEMES_TO_REDACT = frozenset({
     "javascript", "data", "file", "chrome-extension", "moz-extension",
     "about", "blob", "view-source", "ftp", "ws", "wss",
 })
+
+CDP_SETUP_GUIDANCE = {
+    "cdp_base": "http://127.0.0.1:9222",
+    "summary": "Start Chrome or Chromium with a temporary profile and loopback-only CDP.",
+    "required_flags": [
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=9222",
+        "--user-data-dir=<temporary-profile>",
+    ],
+    "warning": "Do not use the normal profile; use a temporary profile for browser-fetch-router CDP.",
+}
 
 
 @dataclass(frozen=True)
@@ -117,6 +133,10 @@ def _tab_list_failure_envelope(
         "CDP tab list endpoint was unreachable.",
     )
     evidence = {"cdp_base": cdp_base} if cdp_base is not None else None
+    if code == "cdp_unreachable":
+        guidance = dict(CDP_SETUP_GUIDANCE)
+        guidance["cdp_base"] = cdp_base or CDP_SETUP_GUIDANCE["cdp_base"]
+        evidence = {**(evidence or {}), "setup": guidance}
     return envelope(
         command="read-user-tabs",
         status="tool_setup_failed",
@@ -165,6 +185,11 @@ def _cdp_failure_envelope(
     else:
         code = "cdp_screenshot_failed" if operation == "screenshot" else "cdp_text_extraction_failed"
         message = "CDP operation failed."
+    if code == "cdp_unreachable":
+        evidence = {
+            **(evidence or {}),
+            "setup": dict(CDP_SETUP_GUIDANCE),
+        }
     return envelope(
         command="read-user-tabs",
         status="tool_setup_failed",
@@ -595,6 +620,145 @@ def revoke(scope: str, *, session_id: str | None = None) -> dict[str, Any]:
         status="ok",
         evidence=result,
     )
+
+
+def setup_cdp(
+    *,
+    launch: bool = False,
+    start_url: str = "about:blank",
+) -> dict[str, Any]:
+    setup = dict(CDP_SETUP_GUIDANCE)
+    if not launch:
+        return envelope(
+            command="read-user-tabs",
+            status="ok",
+            evidence={"cdp_base": setup["cdp_base"], "setup": setup, "launch_required": True},
+        )
+
+    if start_url != "about:blank":
+        try:
+            start_url = normalize_and_validate_url(start_url)
+        except SafetyError as exc:
+            return envelope(
+                command="read-user-tabs",
+                status="unsafe_url_blocked",
+                error={"code": str(exc), "message": "URL blocked by safety policy"},
+                evidence={"setup": setup},
+            )
+
+    chrome = _find_chrome_executable()
+    if chrome is None:
+        return envelope(
+            command="read-user-tabs",
+            status="tool_setup_failed",
+            error={
+                "code": "chrome_not_found",
+                "message": "Chrome or Chromium executable was not found.",
+            },
+            evidence={"setup": setup},
+        )
+
+    profile_dir = tempfile.mkdtemp(prefix="bfr-cdp-profile.")
+    argv = [
+        chrome,
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=9222",
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        start_url,
+    ]
+    proc = subprocess.Popen(
+        argv,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    if not _wait_for_cdp_ready(setup["cdp_base"]):
+        _terminate_process(proc)
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        return envelope(
+            command="read-user-tabs",
+            status="tool_setup_failed",
+            error={
+                "code": "cdp_launch_failed",
+                "message": "Chrome started but the loopback CDP endpoint did not become reachable.",
+            },
+            evidence={
+                "cdp_base": setup["cdp_base"],
+                "pid": proc.pid,
+                "profile_dir": profile_dir,
+                "setup": setup,
+                "argv": _redacted_launch_argv(argv),
+            },
+        )
+    return envelope(
+        command="read-user-tabs",
+        status="ok",
+        evidence={
+            "cdp_base": setup["cdp_base"],
+            "pid": proc.pid,
+            "profile_dir": profile_dir,
+            "setup": setup,
+            "argv": _redacted_launch_argv(argv),
+        },
+    )
+
+
+def _find_chrome_executable() -> str | None:
+    env_path = (
+        os.environ.get("BFR_CHROME_PATH")
+        or os.environ.get("CHROME_PATH")
+        or os.environ.get("CHROME_BIN")
+    )
+    if env_path:
+        return env_path
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        found = shutil.which(name)
+        if found:
+            return found
+    mac_candidate = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    if Path(mac_candidate).exists():
+        return mac_candidate
+    return None
+
+
+def _wait_for_cdp_ready(cdp_base: str, timeout_sec: float = 8.0) -> bool:
+    deadline = time.monotonic() + max(0.1, timeout_sec)
+    while time.monotonic() < deadline:
+        try:
+            fetch_tab_list(cdp_base, timeout=0.5)
+            return True
+        except Exception:
+            time.sleep(0.2)
+    return False
+
+
+def _terminate_process(proc: subprocess.Popen) -> None:
+    try:
+        proc.terminate()
+    except Exception:
+        return
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _redacted_launch_argv(argv: list[str]) -> list[str]:
+    return [
+        "--user-data-dir=<temporary-profile>" if item.startswith("--user-data-dir=") else item
+        for item in argv
+    ]
 
 
 # --------- helpers ----------------------------------------------------------

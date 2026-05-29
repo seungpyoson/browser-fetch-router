@@ -20,6 +20,12 @@ Use the shared `browser-fetch-router` CLI for all web reads, user-tab reads, and
 - `browser-fetch-router interactive-browser "<task>" --json`
 - `browser-fetch-router doctor --json`
 
+## User Tab CDP Setup
+
+- `read-user-tabs` requires loopback Chrome CDP at `http://127.0.0.1:9222`.
+- Start Chrome/Chromium with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=<temporary-profile>`.
+- Do not use the normal browser profile for CDP.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -37,3 +43,5 @@ Use the shared `browser-fetch-router` CLI for all web reads, user-tab reads, and
 
 - Default-deny URLs and hostname-sensitive tabs are redacted from listings.
 - Hosted-paid providers (Parallel Extract / Browserbase / Browser Use Cloud) require explicit opt-in flags.
+- `interactive-browser --provider cloud` is live with `BROWSER_USE_API_KEY`; `--provider browserbase` is live with `BROWSERBASE_API_KEY` and optional `BROWSERBASE_PROJECT_ID`. Both require hosted opt-in. Do not use local interactive mode as a daily-use provider.
+- If CDP is unreachable, run `browser-fetch-router read-user-tabs setup --json`; use `--launch` only to start an isolated temporary loopback profile.

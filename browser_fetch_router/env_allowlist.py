@@ -6,7 +6,6 @@ import os
 KNOWN_PROVIDER_KEYS = frozenset({
     "PARALLEL_API_KEY",
     "BROWSERBASE_API_KEY",
-    "BROWSERBASE_PROJECT_ID",
     "BROWSER_USE_API_KEY",
 })
 

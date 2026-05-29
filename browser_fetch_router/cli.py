@@ -273,18 +273,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(prog="browser-fetch-router")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    read_web = sub.add_parser("read-web")
+    read_web = sub.add_parser(
+        "read-web",
+        description=(
+            "Fetch a public web URL through the shared router. Paid Parallel "
+            "fallback runs only with --allow-paid and PARALLEL_API_KEY."
+        ),
+    )
     read_web.add_argument("url")
     read_web.add_argument("--json", action="store_true")
     read_web.add_argument("--no-cache", action="store_true")
-    read_web.add_argument("--allow-paid", action="store_true")
+    read_web.add_argument(
+        "--allow-paid",
+        action="store_true",
+        help="Allow paid Parallel fallback when the free/public route is insufficient",
+    )
     read_web.add_argument("--strict-side-effects", action="store_true")
     read_web.add_argument("--allow-side-effects", action="store_true")
     read_web.add_argument("--max-chars", type=int, default=50_000)
 
-    tabs = sub.add_parser("read-user-tabs")
+    cdp_setup_help = (
+        "Uses loopback Chrome CDP at http://127.0.0.1:9222. Start Chrome/Chromium "
+        "with --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 "
+        "--user-data-dir=<temporary-profile>; do not use the normal profile. "
+        "--allow-remote-cdp is an explicit override for non-loopback endpoints."
+    )
+    tabs = sub.add_parser("read-user-tabs", description=cdp_setup_help)
     tabs_sub = tabs.add_subparsers(dest="tabs_command", required=True)
-    tabs_list = tabs_sub.add_parser("list")
+    tabs_list = tabs_sub.add_parser("list", description=cdp_setup_help)
     tabs_list.add_argument("--json", action="store_true")
     tabs_list.add_argument("--all", action="store_true")
     tabs_list.add_argument("--show-all", action="store_true")
@@ -295,35 +311,76 @@ def build_parser() -> argparse.ArgumentParser:
     # invocation (Gemini medium on commit 3b131b7).
     tabs_list.add_argument("--approval-scope")
     tabs_list.add_argument("--persist-approval", action="store_true")
-    tabs_read = tabs_sub.add_parser("read")
+    tabs_read = tabs_sub.add_parser("read", description=cdp_setup_help)
     tabs_read.add_argument("target")
     tabs_read.add_argument("--json", action="store_true")
     tabs_read.add_argument("--approval-scope")
     tabs_read.add_argument("--persist-approval", action="store_true")
     tabs_read.add_argument("--allow-remote-cdp", action="store_true")
     tabs_read.add_argument("--max-chars", type=int, default=20_000)
-    tabs_shot = tabs_sub.add_parser("screenshot")
+    tabs_shot = tabs_sub.add_parser("screenshot", description=cdp_setup_help)
     tabs_shot.add_argument("target")
     tabs_shot.add_argument("--output", required=True)
     tabs_shot.add_argument("--json", action="store_true")
     tabs_shot.add_argument("--approval-scope")
     tabs_shot.add_argument("--persist-approval", action="store_true")
     tabs_shot.add_argument("--allow-remote-cdp", action="store_true")
+    tabs_setup = tabs_sub.add_parser("setup", description=cdp_setup_help)
+    tabs_setup.add_argument("--json", action="store_true")
+    tabs_setup.add_argument(
+        "--launch",
+        action="store_true",
+        help="Start a temporary loopback Chrome CDP profile",
+    )
+    tabs_setup.add_argument(
+        "--start-url",
+        default="about:blank",
+        help="Initial URL for --launch; http(s) only, or about:blank",
+    )
     tabs_revoke = tabs_sub.add_parser("revoke")
     tabs_revoke.add_argument("scope")
     tabs_revoke.add_argument("--json", action="store_true")
 
-    browser = sub.add_parser("interactive-browser")
+    browser = sub.add_parser(
+        "interactive-browser",
+        description=(
+            "Interactive browser task runner. Provider capability truth: "
+            "cloud=live with BROWSER_USE_API_KEY and --allow-hosted-browser; "
+            "browserbase=live with BROWSERBASE_API_KEY and --allow-hosted-browser; "
+            "optional BROWSERBASE_PROJECT_ID is passed through when present."
+        ),
+    )
     browser.add_argument("task")
     browser.add_argument("--json", action="store_true")
-    browser.add_argument("--provider", choices=["local", "browserbase", "cloud"])
+    browser.add_argument(
+        "--provider",
+        choices=["browserbase", "cloud"],
+        help=(
+            "cloud=live with BROWSER_USE_API_KEY; "
+            "browserbase=live with BROWSERBASE_API_KEY and optional BROWSERBASE_PROJECT_ID"
+        ),
+    )
     browser.add_argument("--allow-hosted-browser", action="store_true")
     browser.add_argument("--confirm-irreversible")
-    browser.add_argument("--max-steps", type=int, default=10)
+    browser.add_argument(
+        "--max-steps",
+        type=int,
+        default=10,
+        help="Maximum task steps; cloud sessions poll provider stepCount and stop at the cap",
+    )
     browser.add_argument("--max-duration-sec", type=int, default=300)
-    browser.add_argument("--max-cost-usd", type=float, default=0.05)
+    browser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=0.25,
+        help=(
+            "Per-call and per-session hosted-browser cap; "
+            "daily cap uses BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD"
+        ),
+    )
 
     doctor = sub.add_parser("doctor")
+    doctor.add_argument("--global-install", action="store_true")
     doctor.add_argument("--json", action="store_true")
 
     cleanup = sub.add_parser("cleanup")
@@ -403,7 +460,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "doctor":
         from browser_fetch_router.doctor import run_doctor
-        return _emit("doctor", handler=run_doctor)
+        return _emit("doctor", handler=lambda: run_doctor(global_install=args.global_install))
 
     if args.command == "read-web":
         from browser_fetch_router.read_web import read_web
@@ -539,6 +596,7 @@ def _dispatch_read_user_tabs(args) -> dict:
         read_tab,
         revoke,
         screenshot_tab,
+        setup_cdp,
     )
     from browser_fetch_router.session import current_session_id
 
@@ -569,6 +627,8 @@ def _dispatch_read_user_tabs(args) -> dict:
             allow_remote_cdp=args.allow_remote_cdp,
             session_id=current_session_id(optional=True),
         )
+    if args.tabs_command == "setup":
+        return setup_cdp(launch=args.launch, start_url=args.start_url)
     if args.tabs_command == "revoke":
         return revoke(args.scope, session_id=current_session_id(optional=True))
     return envelope(

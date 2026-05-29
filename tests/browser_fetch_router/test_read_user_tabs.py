@@ -31,6 +31,98 @@ def _patch_single_tab(
     return url
 
 
+def test_setup_cdp_launch_starts_temp_loopback_chrome(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    calls = []
+
+    class FakePopen:
+        pid = 4242
+
+        def __init__(self, argv, **kwargs):
+            calls.append((argv, kwargs))
+
+    profile = tmp_path / "bfr-cdp-profile.test"
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: True, raising=False)
+
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    assert result["status"] == "ok"
+    assert result["evidence"]["cdp_base"] == "http://127.0.0.1:9222"
+    assert result["evidence"]["pid"] == 4242
+    assert result["evidence"]["profile_dir"] == str(profile)
+    argv, kwargs = calls[0]
+    assert argv[0] == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    assert "--remote-debugging-address=127.0.0.1" in argv
+    assert "--remote-debugging-port=9222" in argv
+    assert f"--user-data-dir={profile}" in argv
+    assert any(item.startswith("https://example.com") for item in argv)
+    assert kwargs["start_new_session"] is True
+    assert "normal profile" in result["evidence"]["setup"]["warning"]
+
+
+def test_setup_cdp_launch_rejects_unsafe_start_url_before_chrome(monkeypatch):
+    from browser_fetch_router import read_user_tabs as rut
+
+    def fail_find_chrome():
+        raise AssertionError("Chrome lookup should not run for an unsafe start URL")
+
+    monkeypatch.setattr(rut, "_find_chrome_executable", fail_find_chrome)
+
+    result = rut.setup_cdp(launch=True, start_url="file:///etc/passwd")
+
+    assert result["status"] == "unsafe_url_blocked"
+    assert result["error"]["code"] == "blocked_scheme"
+    assert result["error"]["message"] == "URL blocked by safety policy"
+    assert result["evidence"]["setup"]["cdp_base"] == "http://127.0.0.1:9222"
+
+
+def test_find_chrome_executable_honors_chrome_bin(monkeypatch):
+    from browser_fetch_router import read_user_tabs as rut
+
+    monkeypatch.delenv("BFR_CHROME_PATH", raising=False)
+    monkeypatch.delenv("CHROME_PATH", raising=False)
+    monkeypatch.setenv("CHROME_BIN", "/custom/chrome")
+
+    assert rut._find_chrome_executable() == "/custom/chrome"
+
+
+def test_setup_cdp_launch_reports_failure_when_cdp_never_becomes_ready(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    events = []
+
+    class FakePopen:
+        pid = 4243
+
+        def __init__(self, argv, **kwargs):
+            events.append(("launch", argv, kwargs))
+
+        def terminate(self):
+            events.append(("terminate",))
+
+        def wait(self, timeout):
+            events.append(("wait", timeout))
+
+    profile = tmp_path / "bfr-cdp-profile.failed"
+    profile.mkdir()
+    monkeypatch.setattr(rut, "_find_chrome_executable", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(rut.tempfile, "mkdtemp", lambda prefix: str(profile))
+    monkeypatch.setattr(rut.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(rut, "_wait_for_cdp_ready", lambda _base: False, raising=False)
+
+    result = rut.setup_cdp(launch=True, start_url="https://example.com")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_launch_failed"
+    assert result["evidence"]["pid"] == 4243
+    assert ("terminate",) in events
+    assert not profile.exists()
+
+
 def test_list_tabs_maps_unexpected_redirect_to_cdp_specific_code(monkeypatch, tmp_path):
     from browser_fetch_router import cdp
     from browser_fetch_router import read_user_tabs as rut
@@ -67,6 +159,29 @@ def test_list_tabs_sanitizes_unknown_cdp_list_failure(monkeypatch, tmp_path):
     assert result["error"]["code"] == "cdp_unreachable"
     assert result["error"]["message"] == "CDP tab list endpoint was unreachable."
     assert "cookie=secret" not in result["error"]["message"]
+
+
+def test_list_tabs_cdp_unreachable_includes_loopback_setup_guidance(monkeypatch, tmp_path):
+    from browser_fetch_router import read_user_tabs as rut
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(rut, "cdp_base_url", lambda **_kw: "http://127.0.0.1:9222")
+
+    def fail(_base):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(rut, "fetch_tab_list", fail)
+
+    result = rut.list_tabs(session_id="sid-read-user-tabs")
+
+    assert result["status"] == "tool_setup_failed"
+    assert result["error"]["code"] == "cdp_unreachable"
+    setup = result["evidence"]["setup"]
+    assert setup["cdp_base"] == "http://127.0.0.1:9222"
+    assert "--remote-debugging-address=127.0.0.1" in setup["required_flags"]
+    assert "--remote-debugging-port=9222" in setup["required_flags"]
+    assert "--user-data-dir=<temporary-profile>" in setup["required_flags"]
+    assert "normal profile" in setup["warning"]
 
 
 def test_read_tab_maps_unexpected_redirect_to_cdp_specific_code(monkeypatch, tmp_path):

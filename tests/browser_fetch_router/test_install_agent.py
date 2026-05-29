@@ -696,6 +696,37 @@ def test_install_agent_schema_documents_default_and_supported_distinction():
     assert "SKILL.md" in install_schema["properties"]["--adapter-path"]["description"]
 
 
+def test_docs_and_adapters_expose_cdp_setup_without_embedded_secrets():
+    repo = Path(__file__).resolve().parents[2]
+    adapter_paths = sorted((repo / "browser_fetch_router" / "adapters").glob("*/SKILL.md"))
+    doc_paths = [
+        repo / "README.md",
+        repo / "specs" / "003-browser-reliability" / "contracts" / "read-user-tabs-cli.md",
+    ]
+
+    for path in [*adapter_paths, *doc_paths]:
+        text = path.read_text()
+        normalized = " ".join(text.split())
+        assert "127.0.0.1:9222" in text, path
+        assert "--remote-debugging-port=9222" in text, path
+        assert "--user-data-dir=<temporary-profile>" in text, path
+        assert "Do not use the normal" in normalized or "do not use the normal" in normalized, path
+        assert "sk-" not in text, path
+        assert "BROWSER_USE_API_KEY=" not in text, path
+
+    provider_doc_paths = [
+        repo / "README.md",
+        repo / "docs" / "browser-fetch-router-interactive-browser-contract.md",
+    ]
+    for path in [*adapter_paths, *provider_doc_paths]:
+        text = path.read_text()
+        normalized = " ".join(text.split())
+        normalized_lower = normalized.lower()
+        assert "provider cloud" in normalized_lower and "live" in normalized_lower, path
+        assert "browserbase" in normalized_lower and "live" in normalized_lower, path
+        assert "local" in normalized_lower and "daily-use provider" in normalized_lower, path
+
+
 def test_install_agent_contract_docs_include_support_matrix_and_caveats():
     doc = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
         encoding="utf-8"
@@ -708,6 +739,21 @@ def test_install_agent_contract_docs_include_support_matrix_and_caveats():
     assert "inheritance" in doc
     assert "--adapter-path" in doc
     assert "SKILL.md" in doc
+
+
+def test_global_install_contract_docs_include_freshness_verifier():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    contract = Path(
+        "specs/003-browser-reliability/contracts/global-install-verification.md"
+    ).read_text(encoding="utf-8")
+    install_contract = Path("docs/browser-fetch-router-install-agent-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    for doc in [readme, contract, install_contract]:
+        assert "doctor --global-install --json" in doc
+        assert "stale_global_install" in doc
+        assert "pipx reinstall" in doc
 
 
 def test_install_agent_contract_docs_pin_skip_reason_and_adapter_path_modes():

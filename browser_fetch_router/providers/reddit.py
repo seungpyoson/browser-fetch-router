@@ -71,6 +71,37 @@ def _extract_title(data: Any) -> str | None:
 def _shape_reddit_listing(data: Any) -> str:
     """Shape post + top comments into markdown."""
     lines: list[str] = []
+    if isinstance(data, dict):
+        children = (data.get("data") or {}).get("children") or []
+        if isinstance(children, list):
+            subreddit = _first_text(children, "subreddit")
+            heading = f"# r/{subreddit}" if subreddit else "# Reddit listing"
+            post_lines: list[str] = []
+            for child in children[:5]:
+                post = (child or {}).get("data", {}) or {}
+                title = post.get("title")
+                if not title:
+                    continue
+                author = post.get("author") or "unknown"
+                score = post.get("score")
+                comments = post.get("num_comments")
+                permalink = post.get("permalink")
+                meta = [f"u/{author}"]
+                if score is not None:
+                    meta.append(f"score {score}")
+                if comments is not None:
+                    meta.append(f"{comments} comments")
+                post_lines.append(f"\n## {title}")
+                post_lines.append(f"{' | '.join(meta)}")
+                if permalink:
+                    post_lines.append(f"https://www.reddit.com{permalink}")
+                selftext = post.get("selftext") or ""
+                if selftext:
+                    post_lines.append(selftext)
+            if post_lines:
+                lines.append(heading)
+                lines.extend(post_lines)
+            return "\n".join(lines).strip()
     if isinstance(data, list) and len(data) >= 1:
         post_node = (data[0] or {}).get("data", {}).get("children", [])
         if post_node:
@@ -90,6 +121,14 @@ def _shape_reddit_listing(data: Any) -> str:
                 if body:
                     lines.append(f"\n**{author}**: {body}\n")
     return "\n".join(lines).strip()
+
+
+def _first_text(children: list[Any], key: str) -> str | None:
+    for child in children:
+        value = ((child or {}).get("data") or {}).get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _result(status: str, *, url: str, title: str | None = None, content_markdown: str | None = None, error: dict[str, Any] | None = None) -> dict[str, Any]:

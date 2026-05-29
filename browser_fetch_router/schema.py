@@ -38,6 +38,11 @@ def schema_payload() -> dict[str, Any]:
     install_schema["properties"]["--select"]["description"] = (
         "Comma-separated subset of supported agents: " + ",".join(AGENTS)
     )
+    from browser_fetch_router.interactive import provider_capabilities
+
+    output_schema["commandFlags"]["interactive-browser"]["providerCapabilities"] = (
+        provider_capabilities()
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "output_schema": output_schema,
