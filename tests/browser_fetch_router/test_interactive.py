@@ -429,6 +429,65 @@ def test_cloud_after_opt_in_dispatches_browser_use_cloud_with_cost_guard(tmp_pat
     assert ledger.session_total("bfr-cloud-ok") == pytest.approx(0.18)
 
 
+def test_cloud_reported_cost_settles_reservation_without_release_gap(
+    tmp_path, monkeypatch
+):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+    from browser_fetch_router.providers import browser_use_cloud
+
+    def fake_run_task(**_kwargs):
+        return {
+            "status": "ok",
+            "provider": "browser-use-cloud",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browser-use-cloud",
+                "session_id": "remote-race",
+                "remote_status": "stopped",
+                "step_count": 1,
+                "total_cost_usd": "0.18",
+            },
+        }
+
+    original_release = CostLedger.release
+    release_calls = []
+
+    def racing_release(self, handle):
+        released = original_release(self, handle)
+        release_calls.append(handle)
+        self.reserve(
+            "bfr-cloud-race-other",
+            "browser-use-cloud",
+            0.20,
+            request_cap=0.25,
+            session_cap=0.25,
+            daily_cap=0.30,
+        )
+        return released
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-cloud-race")
+    monkeypatch.setenv("BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD", "0.30")
+    monkeypatch.setenv("BROWSER_USE_API_KEY", "bu_secret")
+    monkeypatch.setattr(browser_use_cloud, "run_task", fake_run_task)
+    monkeypatch.setattr(CostLedger, "release", racing_release)
+
+    result = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="cloud",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert result["status"] == "ok"
+    assert result["content_markdown"] == "Page title: Example Domain"
+    assert release_calls == []
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-cloud-race") == pytest.approx(0.18)
+    assert ledger.session_total("bfr-cloud-race-other") == pytest.approx(0.0)
+
+
 def test_cloud_respects_explicit_cost_cap_below_default(tmp_path, monkeypatch):
     from browser_fetch_router import interactive
     from browser_fetch_router.cost import CostLedger

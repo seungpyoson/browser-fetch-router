@@ -37,6 +37,7 @@ SEMANTIC_MAIN_MARKERS = (
 
 SHORT_VALID_MIN_WORDS = 20
 SHORT_VALID_MIN_CHARS = 120
+LOGIN_MARKER_SCAN_CHARS = 500
 
 
 def _word_count(text: str) -> int:
@@ -66,11 +67,13 @@ def assess_quality(extracted_text: str, raw_html: str) -> dict[str, object]:
     lower_html = raw_html.lower()
     visible_html = _visible_text(raw_html)
     lower_visible_html = visible_html.lower()
+    leading_text = lower_text[:LOGIN_MARKER_SCAN_CHARS]
+    leading_visible_html = lower_visible_html[:LOGIN_MARKER_SCAN_CHARS]
     blocked: list[str] = []
     if (
-        _contains_phrase_marker(lower_text[:500], LOGIN_MARKERS)
-        or _contains_phrase_marker(lower_text, STRONG_LOGIN_MARKERS)
-        or _contains_phrase_marker(lower_visible_html, STRONG_LOGIN_MARKERS)
+        _contains_phrase_marker(leading_text, LOGIN_MARKERS)
+        or _contains_phrase_marker(leading_text, STRONG_LOGIN_MARKERS)
+        or _contains_phrase_marker(leading_visible_html, STRONG_LOGIN_MARKERS)
     ):
         blocked.append("login_wall")
     if any(marker in lower_html or marker in lower_text for marker in CAPTCHA_MARKERS):

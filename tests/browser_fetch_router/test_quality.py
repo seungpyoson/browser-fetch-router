@@ -78,6 +78,19 @@ def test_strong_login_prompt_in_visible_html_blocks():
     assert quality["passes_quality_gate"] is False
 
 
+def test_long_article_footer_subscription_cta_does_not_block_public_content():
+    article_text = " ".join(f"article{i}" for i in range(180))
+    footer = "Subscribe to read more from our newsletter archive."
+    text = f"{article_text}\n{footer}"
+    html = f"<article><p>{article_text}</p></article><footer>{footer}</footer>"
+
+    quality = assess_quality(text, html)
+
+    assert quality["word_count"] >= 80
+    assert "login_wall" not in quality["blocked_signals"]
+    assert quality["passes_quality_gate"] is True
+
+
 def test_login_marker_does_not_match_inside_words():
     text = (
         "This design internal note has enough words and characters to pass as short "

@@ -282,16 +282,7 @@ def _record_reported_hosted_cost(
     cost_cap: float,
     daily_cap: float,
 ) -> dict[str, Any] | None:
-    ledger.release(reservation)
-    recorded = _reserve_hosted_cost(
-        ledger,
-        session_id,
-        provider,
-        float(reported_cost),
-        request_cap=cost_cap,
-        daily_cap=daily_cap,
-    )
-    if recorded:
+    if ledger.settle(reservation, float(reported_cost)):
         return None
     ledger.disable_session(session_id, "cost_record_failed")
     return _cost_cap_exceeded(

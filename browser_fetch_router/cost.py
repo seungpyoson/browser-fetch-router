@@ -230,6 +230,26 @@ class CostLedger:
                 return True
             return False
 
+    def settle(self, handle: str | int | None, amount: float) -> bool:
+        if not handle or not math.isfinite(amount) or amount < 0:
+            return False
+        with _connect(self.path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                "UPDATE costs SET estimated_cost_usd = ? WHERE audit_id = ?",
+                (amount, str(handle)),
+            )
+            conn.execute("COMMIT")
+            if cur.rowcount > 0:
+                self._mirror({
+                    "event": "settle",
+                    "audit_id": str(handle),
+                    "amount_usd": amount,
+                    "ts": datetime.now(UTC).isoformat(),
+                })
+                return True
+            return False
+
     def session_total(self, session_id: str) -> float:
         with _connect(self.path) as conn:
             return float(conn.execute(
