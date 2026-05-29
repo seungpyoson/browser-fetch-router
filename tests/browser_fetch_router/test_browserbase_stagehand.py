@@ -43,10 +43,12 @@ class _FakeSession:
         self._result = result
 
     async def execute(self, **kwargs):
+        await asyncio.sleep(0)
         self._events.append(("execute", kwargs))
         return _Response(self._result)
 
     async def end(self):
+        await asyncio.sleep(0)
         self._events.append(("end", {}))
 
 
@@ -73,6 +75,7 @@ class _FakeStagehand:
         self.events.append(("client_exit", {}))
 
     async def start(self, **kwargs):
+        await asyncio.sleep(0)
         self.events.append(("start", kwargs))
         return _FakeSession(self.events, _Result())
 
@@ -302,6 +305,7 @@ def test_browserbase_stagehand_inside_event_loop_is_structured_without_warning(r
     from browser_fetch_router.providers import browserbase_stagehand
 
     async def call_provider():
+        await asyncio.sleep(0)
         return browserbase_stagehand.run_task(
             "Open https://example.com and report the page title",
             api_key="bb_secret",

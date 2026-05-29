@@ -5,6 +5,8 @@ import builtins
 import sys
 import types
 
+import pytest
+
 
 def test_local_interactive_browser_is_not_a_daily_provider(monkeypatch):
     from browser_fetch_router import interactive
@@ -144,7 +146,7 @@ def test_browserbase_after_opt_in_dispatches_stagehand_with_cost_guard(tmp_path,
     }]
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-ok") == 0.25
+    assert ledger.session_total("bfr-browserbase-ok") == pytest.approx(0.25)
 
 
 def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
@@ -197,8 +199,8 @@ def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
     assert len(calls) == 2
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-day-a") == 0.25
-    assert ledger.session_total("bfr-browserbase-day-b") == 0.25
+    assert ledger.session_total("bfr-browserbase-day-a") == pytest.approx(0.25)
+    assert ledger.session_total("bfr-browserbase-day-b") == pytest.approx(0.25)
 
 
 def test_browserbase_unreported_cost_counts_against_daily_cap(tmp_path, monkeypatch):
@@ -252,9 +254,9 @@ def test_browserbase_unreported_cost_counts_against_daily_cap(tmp_path, monkeypa
     assert len(calls) == 1
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-capped-a") == 0.25
-    assert ledger.session_total("bfr-browserbase-capped-b") == 0.0
-    assert ledger.daily_total() == 0.25
+    assert ledger.session_total("bfr-browserbase-capped-a") == pytest.approx(0.25)
+    assert ledger.session_total("bfr-browserbase-capped-b") == pytest.approx(0.0)
+    assert ledger.daily_total() == pytest.approx(0.25)
 
 
 def test_browserbase_invalid_daily_cap_rejects_before_provider(tmp_path, monkeypatch):
@@ -337,7 +339,7 @@ def test_browserbase_daily_cap_below_call_cap_blocks_before_provider(tmp_path, m
     assert calls == []
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-daily-below-call") == 0.0
+    assert ledger.session_total("bfr-browserbase-daily-below-call") == pytest.approx(0.0)
 
 
 def test_interactive_provider_capabilities_mark_cloud_and_browserbase_live_without_local():
@@ -424,7 +426,7 @@ def test_cloud_after_opt_in_dispatches_browser_use_cloud_with_cost_guard(tmp_pat
     }]
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-ok") == 0.18
+    assert ledger.session_total("bfr-cloud-ok") == pytest.approx(0.18)
 
 
 def test_cloud_respects_explicit_cost_cap_below_default(tmp_path, monkeypatch):
@@ -464,10 +466,10 @@ def test_cloud_respects_explicit_cost_cap_below_default(tmp_path, monkeypatch):
     )
 
     assert result["status"] == "ok"
-    assert calls[0]["max_cost_usd"] == 0.05
+    assert calls[0]["max_cost_usd"] == pytest.approx(0.05)
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-low-cap") == 0.04
+    assert ledger.session_total("bfr-cloud-low-cap") == pytest.approx(0.04)
 
 
 def test_cloud_success_without_reported_cost_releases_reservation(tmp_path, monkeypatch):
@@ -502,7 +504,7 @@ def test_cloud_success_without_reported_cost_releases_reservation(tmp_path, monk
 
     assert result["status"] == "ok"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-no-cost") == 0.0
+    assert ledger.session_total("bfr-cloud-no-cost") == pytest.approx(0.0)
 
 
 def test_cloud_failed_provider_without_reported_cost_releases_reservation(tmp_path, monkeypatch):
@@ -537,7 +539,7 @@ def test_cloud_failed_provider_without_reported_cost_releases_reservation(tmp_pa
 
     assert result["status"] == "provider_unavailable"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-no-cost-failure") == 0.0
+    assert ledger.session_total("bfr-cloud-no-cost-failure") == pytest.approx(0.0)
 
 
 def test_cloud_failed_provider_with_reported_cost_records_actual_cost(tmp_path, monkeypatch):
@@ -574,7 +576,7 @@ def test_cloud_failed_provider_with_reported_cost_records_actual_cost(tmp_path, 
 
     assert result["status"] == "provider_unavailable"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-step-cap") == 0.07
+    assert ledger.session_total("bfr-cloud-step-cap") == pytest.approx(0.07)
 
 
 def test_cloud_provider_exception_releases_reservation(tmp_path, monkeypatch):
@@ -600,7 +602,7 @@ def test_cloud_provider_exception_releases_reservation(tmp_path, monkeypatch):
     assert result["status"] == "provider_unavailable"
     assert result["error"]["code"] == "browser_use_cloud_exception"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-exception") == 0.0
+    assert ledger.session_total("bfr-cloud-exception") == pytest.approx(0.0)
 
 
 def test_cloud_provider_import_error_releases_reservation(tmp_path, monkeypatch):
@@ -629,7 +631,7 @@ def test_cloud_provider_import_error_releases_reservation(tmp_path, monkeypatch)
     assert result["status"] == "provider_unavailable"
     assert result["error"]["code"] == "browser_use_cloud_exception"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-import-error") == 0.0
+    assert ledger.session_total("bfr-cloud-import-error") == pytest.approx(0.0)
 
 
 def test_cloud_session_cap_blocks_second_call_before_provider(tmp_path, monkeypatch):
@@ -678,7 +680,7 @@ def test_cloud_session_cap_blocks_second_call_before_provider(tmp_path, monkeypa
     assert len(calls) == 1
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-cumulative") == 0.18
+    assert ledger.session_total("bfr-cloud-cumulative") == pytest.approx(0.18)
     assert ledger.is_paid_disabled("bfr-cloud-cumulative")
 
 
@@ -729,8 +731,8 @@ def test_cloud_default_daily_cap_allows_fresh_session_after_prior_cost(tmp_path,
     assert len(calls) == 2
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-day-a") == 0.18
-    assert ledger.session_total("bfr-cloud-day-b") == 0.18
+    assert ledger.session_total("bfr-cloud-day-a") == pytest.approx(0.18)
+    assert ledger.session_total("bfr-cloud-day-b") == pytest.approx(0.18)
 
 
 def test_cloud_configured_daily_cap_blocks_cross_session_call_before_provider(tmp_path, monkeypatch):
@@ -782,8 +784,8 @@ def test_cloud_configured_daily_cap_blocks_cross_session_call_before_provider(tm
     assert len(calls) == 1
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-day-capped-a") == 0.18
-    assert ledger.session_total("bfr-cloud-day-capped-b") == 0.0
+    assert ledger.session_total("bfr-cloud-day-capped-a") == pytest.approx(0.18)
+    assert ledger.session_total("bfr-cloud-day-capped-b") == pytest.approx(0.0)
 
 
 def test_cloud_reported_cost_equal_to_cap_is_recorded(tmp_path, monkeypatch):
@@ -819,7 +821,7 @@ def test_cloud_reported_cost_equal_to_cap_is_recorded(tmp_path, monkeypatch):
 
     assert result["status"] == "ok"
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-cloud-boundary") == 0.25
+    assert ledger.session_total("bfr-cloud-boundary") == pytest.approx(0.25)
 
 
 def test_cloud_provider_overrun_returns_cost_cap_and_disables_session(tmp_path, monkeypatch):
@@ -859,7 +861,7 @@ def test_cloud_provider_overrun_returns_cost_cap_and_disables_session(tmp_path, 
     assert result["status"] == "cost_cap_exceeded"
     assert result["error"]["code"] == "cost_cap_exceeded"
     assert result["evidence"]["reported_total_cost_usd"] == "0.30"
-    assert result["evidence"]["max_cost_usd"] == 0.25
+    assert result["evidence"]["max_cost_usd"] == pytest.approx(0.25)
     assert len(calls) == 1
 
     result = interactive.run_interactive_browser(

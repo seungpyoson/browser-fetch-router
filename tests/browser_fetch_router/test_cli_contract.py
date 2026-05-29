@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from browser_fetch_router.cli import normalize_argv
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -229,7 +231,9 @@ def test_doctor_global_install_verification_reports_current_shim(tmp_path):
     global_install = payload["evidence"]["global_install"]
     assert global_install["shim_path"] == str(fake_exe)
     assert global_install["schema_version"] == "browser-fetch-router.v1"
-    assert global_install["schema_defaults"]["interactive-browser.--max-cost-usd"] == 0.25
+    assert global_install["schema_defaults"][
+        "interactive-browser.--max-cost-usd"
+    ] == pytest.approx(0.25)
     assert global_install["schema_defaults"]["interactive-browser.--max-steps"] == 10
     assert (
         "interactive-browser.provider.local.status"
@@ -387,5 +391,5 @@ def test_interactive_browser_default_cost_cap_matches_schema():
     args = parser.parse_args(["interactive-browser", "open page https://example.com"])
     interactive_schema = schema_payload()["output_schema"]["commandFlags"]["interactive-browser"]
 
-    assert args.max_cost_usd == 0.25
-    assert interactive_schema["properties"]["--max-cost-usd"]["default"] == 0.25
+    assert args.max_cost_usd == pytest.approx(0.25)
+    assert interactive_schema["properties"]["--max-cost-usd"]["default"] == pytest.approx(0.25)
