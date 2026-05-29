@@ -5,6 +5,8 @@ import json
 import os
 import re
 import signal
+import shutil
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +58,8 @@ def validate_session_id(session_id: str) -> str:
 REGISTRY_PROCESSES_KEY = "local_processes"
 REGISTRY_PROCESS_GROUP_KEY = "process_group"
 REGISTRY_OUTCOME_KEYS = ("cleaned", "skipped", "failed")
+CDP_PROFILE_PREFIX = "bfr-cdp-profile."
+CDP_PROCESS_KIND_READ_USER_TABS = "read-user-tabs-cdp"
 
 
 def session_registry_dir() -> Path:
@@ -268,11 +272,11 @@ def _kill_pid_safely(pid: int, expected_create_time: float, *, dry_run: bool) ->
             return "failed"
     # Phase 2: graceful exit window.
     try:
-        gone, alive = psutil.wait_procs(
+        _gone, alive = psutil.wait_procs(
             [proc, *descendants], timeout=1.0
         )
     except psutil.Error:
-        gone, alive = [], [proc, *descendants]
+        _gone, alive = [], [proc, *descendants]
     if not alive:
         return "cleaned"
     # Phase 3: SIGKILL escalation on SIGTERM-ignoring survivors.
@@ -397,7 +401,14 @@ def run_cleanup(
             # raises a loud KeyError here instead of being silently
             # miscategorized as `failed` (Gemini medium on 9a26fb2:
             # fail-loud > defensive-fallback for schema invariants).
-            per_session[outcome].append({"pid": pid})
+            result_entry: dict[str, Any] = {"pid": pid}
+            per_session[outcome].append(result_entry)
+            _cleanup_registered_process_resources(
+                entry,
+                result_entry,
+                outcome=outcome,
+                dry_run=dry_run,
+            )
         # Unlink the registry only when:
         #   - dry_run=False (round-6 r6-05: dry_run is side-effect-free), AND
         #   - no entry remains "failed" (round-11 i06: a SIGKILL-ignoring
@@ -428,6 +439,44 @@ def run_cleanup(
             "max_age_days": max_age_days,
         },
     )
+
+
+def _cleanup_registered_process_resources(
+    entry: dict[str, Any],
+    result_entry: dict[str, Any],
+    *,
+    outcome: str,
+    dry_run: bool,
+) -> None:
+    if dry_run or outcome != "cleaned":
+        return
+    info = entry.get("info")
+    if not isinstance(info, dict):
+        return
+    if info.get("kind") != CDP_PROCESS_KIND_READ_USER_TABS:
+        return
+    profile_dir = info.get("profile_dir")
+    if isinstance(profile_dir, str):
+        result_entry["profile_dir_removed"] = _remove_cdp_profile_dir(profile_dir)
+
+
+def _remove_cdp_profile_dir(profile_dir: str) -> bool:
+    try:
+        path = Path(profile_dir).resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+    except (OSError, ValueError):
+        return False
+    if path.parent != temp_root:
+        return False
+    if not path.name.startswith(CDP_PROFILE_PREFIX):
+        return False
+    if not path.is_dir():
+        return False
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        return False
+    return True
 
 
 def _rotate_logs(
