@@ -144,7 +144,7 @@ def test_browserbase_after_opt_in_dispatches_stagehand_with_cost_guard(tmp_path,
     }]
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-ok") == 0
+    assert ledger.session_total("bfr-browserbase-ok") == 0.25
 
 
 def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
@@ -164,7 +164,6 @@ def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
             "evidence": {
                 "provider": "browserbase",
                 "session_id": f"bb-{len(calls)}",
-                "total_cost_usd": "0.18",
             },
         }
 
@@ -198,8 +197,64 @@ def test_browserbase_default_daily_cap_allows_fresh_session_after_prior_cost(
     assert len(calls) == 2
 
     ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
-    assert ledger.session_total("bfr-browserbase-day-a") == 0.18
-    assert ledger.session_total("bfr-browserbase-day-b") == 0.18
+    assert ledger.session_total("bfr-browserbase-day-a") == 0.25
+    assert ledger.session_total("bfr-browserbase-day-b") == 0.25
+
+
+def test_browserbase_unreported_cost_counts_against_daily_cap(tmp_path, monkeypatch):
+    from browser_fetch_router import interactive
+    from browser_fetch_router.cost import CostLedger
+
+    calls = []
+
+    def fake_run_task(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "ok",
+            "provider": "browserbase",
+            "content_markdown": "Page title: Example Domain",
+            "evidence": {
+                "provider": "browserbase",
+                "session_id": f"bb-{len(calls)}",
+                "usage": {"input_tokens": 10, "output_tokens": 3},
+            },
+        }
+
+    fake_module = types.SimpleNamespace(run_task=fake_run_task)
+    monkeypatch.setitem(
+        sys.modules,
+        "browser_fetch_router.providers.browserbase_stagehand",
+        fake_module,
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BROWSERBASE_API_KEY", "bb_secret")
+    monkeypatch.setenv("BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD", "0.30")
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-capped-a")
+    first = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    monkeypatch.setenv("BFR_SESSION_ID", "bfr-browserbase-capped-b")
+    second = interactive.run_interactive_browser(
+        "Open https://example.com and report the page title",
+        provider="browserbase",
+        allow_hosted_browser=True,
+        max_cost_usd=0.25,
+    )
+
+    assert first["status"] == "ok"
+    assert second["status"] == "cost_cap_exceeded"
+    assert second["evidence"]["reason"] == "paid_session_disabled_or_cap_exceeded"
+    assert len(calls) == 1
+
+    ledger = CostLedger(tmp_path / ".local" / "state" / "browser-fetch-router" / "cost.db")
+    assert ledger.session_total("bfr-browserbase-capped-a") == 0.25
+    assert ledger.session_total("bfr-browserbase-capped-b") == 0.0
+    assert ledger.daily_total() == 0.25
 
 
 def test_browserbase_invalid_daily_cap_rejects_before_provider(tmp_path, monkeypatch):

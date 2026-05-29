@@ -36,5 +36,10 @@ Use Cloud does not expose a create-session `maxSteps` field; the CLI enforces
 `--max-steps` by polling provider `stepCount` and stopping a nonterminal session
 when the cap is reached.
 
+Browser Use Cloud records provider-reported `total_cost_usd` when available.
+Browserbase Stagehand does not currently report USD cost, so successful
+Browserbase runs keep the conservative preflight reservation equal to
+`--max-cost-usd`; this keeps session and daily hosted-browser caps enforceable.
+
 Secrets must come from documented environment variables or the user's local key
 registry. They must not be stored in docs, adapters, tests, or plugin files.

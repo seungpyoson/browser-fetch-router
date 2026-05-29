@@ -27,6 +27,7 @@ With `BROWSER_USE_API_KEY` present and hosted browser opt-in:
 - Cost ledger records the actual reported cost or disables the session on overrun
 - `--max-cost-usd` is the per-call and per-session hosted-browser cap.
 - Daily hosted-browser spend is capped separately by `BFR_HOSTED_BROWSER_DAILY_COST_CAP_USD`, defaulting to `5.0`, so fresh sessions remain usable after earlier same-day hosted calls.
+- Browserbase Stagehand does not currently report USD cost; successful Browserbase runs record the conservative preflight reservation equal to `--max-cost-usd` so daily/session caps still bind.
 
 ## Browserbase And Local Mode Contract
 

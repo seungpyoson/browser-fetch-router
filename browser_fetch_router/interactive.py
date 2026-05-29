@@ -460,8 +460,9 @@ def run_interactive_browser(
             )
             if cost_error:
                 return cost_error
-        else:
-            ledger.release(reservation)
+        # Browserbase Stagehand does not currently report USD cost. Keep the
+        # conservative preflight reservation on success so daily/session caps
+        # still bind instead of silently allowing unmetered hosted sessions.
         return _provider_result_envelope(result)
 
     if selected == "cloud":
